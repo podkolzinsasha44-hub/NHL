@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#1d3f74"/>
+      <stop offset="0.5" stop-color="#0a1428"/>
+      <stop offset="1" stop-color="#04060c"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff1c2"/>
+      <stop offset="0.45" stop-color="#e8c26a"/>
+      <stop offset="1" stop-color="#9c7425"/>
+    </linearGradient>
+    <linearGradient id="ice" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#8fdcff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="40%">
+      <stop offset="0" stop-color="#7fd3ff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#7fd3ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <circle cx="512" cy="440" r="380" fill="url(#glow)"/>
+  <g fill="url(#gold)">
+    <ellipse cx="512" cy="200" rx="150" ry="34"/>
+    <path d="M362 200 Q372 300 470 330 L470 360 L554 360 L554 330 Q652 300 662 200 Z"/>
+    <rect x="440" y="360" width="144" height="40" rx="10"/>
+    <rect x="410" y="404" width="204" height="70" rx="12"/>
+    <rect x="380" y="480" width="264" height="78" rx="12"/>
+    <rect x="350" y="564" width="324" height="86" rx="14"/>
+    <rect x="330" y="656" width="364" height="40" rx="12"/>
+  </g>
+  <g fill="#0a1428" opacity="0.35">
+    <rect x="410" y="436" width="204" height="6"/>
+    <rect x="380" y="516" width="264" height="6"/>
+    <rect x="350" y="604" width="324" height="6"/>
+  </g>
+  <text x="512" y="872" text-anchor="middle" font-family="Oswald" font-weight="700" font-size="168" letter-spacing="14" fill="url(#ice)">NHL GM</text>
+</svg>
