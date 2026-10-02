@@ -112,6 +112,8 @@ export interface Player {
   retired?: number;
   /** Number retired by team */
   jerseyRetired?: string[];
+  /** Signed extension that starts after the current contract. */
+  ext?: Contract;
   /** Draft year this player is eligible for (generated prospects). */
   dy?: number;
   /** Development focus set by the GM. */
@@ -427,6 +429,8 @@ export interface League {
   /** Album: all players who played for the user's team. */
   album: number[];
   lotteryWins: Record<string, number[]>;
+  /** Dead cap from buyouts. */
+  dead: { team: string; season: number; amount: number; name: string }[];
   /** Seen glossary / tutorial flags */
   flags: Record<string, boolean>;
   /** Persistent stats for GM wrapped */

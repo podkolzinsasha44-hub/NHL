@@ -1,0 +1,137 @@
+// Fast Monte-Carlo projections shown to the player. They use the same team strength that
+// drives the match engine, fitted to engine results (scripts/calibrate.ts prints the fit).
+import { teamPower } from './lines';
+import { playoffPicture, compareTeams } from './standings';
+import type { League, Team } from './types';
+
+export const PROJ = { K: 0.205, HOME: 0.62, OT: 0.25 };
+
+let rngState = 123456789;
+const r = () => {
+  rngState ^= rngState << 13; rngState ^= rngState >>> 17; rngState ^= rngState << 5;
+  return (rngState >>> 0) / 4294967296;
+};
+
+export function powers(L: League): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const t of Object.values(L.teams)) out[t.id] = teamPower(L, t);
+  return out;
+}
+
+export function winProb(pH: number, pA: number) {
+  return 1 / (1 + Math.exp(-PROJ.K * (pH - pA + PROJ.HOME)));
+}
+
+export function gameWinProb(L: League, home: string, away: string) {
+  const P = powers(L);
+  return winProb(P[home], P[away]);
+}
+
+function seriesProb(pw: Record<string, number>, hi: string, lo: string, wHi = 0, wLo = 0, sims = 0): boolean {
+  void sims;
+  const pattern = [true, true, false, false, true, false, true];
+  let a = wHi, b = wLo;
+  while (a < 4 && b < 4) {
+    const n = a + b;
+    const p = pattern[n] ? winProb(pw[hi], pw[lo]) : 1 - winProb(pw[lo], pw[hi]);
+    if (r() < p) a++; else b++;
+  }
+  return a === 4;
+}
+
+export interface Odds { po: number; cup: number; pts: number; final: number }
+
+/** Simulates the rest of the season `n` times. */
+export function seasonOdds(L: League, n = 400): Record<string, Odds> {
+  rngState = (Date.parse(L.date) / 86400000) | 0 || 99;
+  const pw = powers(L);
+  const teams = Object.values(L.teams);
+  const res: Record<string, Odds> = {};
+  for (const t of teams) res[t.id] = { po: 0, cup: 0, pts: 0, final: 0 };
+  const remaining = L.phase === 'regular' || L.phase === 'preseason' ? L.games.filter((g) => !g.played && !g.series) : [];
+  const inPlayoffs = L.phase === 'playoffs' && L.playoffs;
+  for (let s = 0; s < n; s++) {
+    const pts: Record<string, number> = {};
+    const rw: Record<string, number> = {};
+    for (const t of teams) { pts[t.id] = L.phase === 'preseason' ? 0 : t.rec.pts; rw[t.id] = t.rec.rw; }
+    for (const g of remaining) {
+      const p = winProb(pw[g.h], pw[g.a]);
+      const ot = r() < PROJ.OT;
+      if (r() < p) { pts[g.h] += 2; if (!ot) rw[g.h]++; if (ot) pts[g.a] += 1; }
+      else { pts[g.a] += 2; if (!ot) rw[g.a]++; if (ot) pts[g.h] += 1; }
+    }
+    let bracket: { hi: string; lo: string; wHi: number; wLo: number }[][];
+    if (inPlayoffs) {
+      // Continue the real bracket
+      const po = L.playoffs!;
+      for (const x of po.series.filter((q) => q.round === 1)) { res[x.hi].po++; res[x.lo].po++; }
+      let alive = po.series.filter((q) => q.round === po.round);
+      let round = po.round;
+      let winners = alive.map((q) => (q.winner ? q.winner : seriesProb(pw, q.hi, q.lo, q.wHi, q.wLo) ? q.hi : q.lo));
+      while (winners.length > 1) {
+        if (round === 3) for (const w of winners) res[w].final++;
+        const nextW: string[] = [];
+        for (let i = 0; i < winners.length; i += 2) {
+          const a = winners[i], b = winners[i + 1];
+          const hi = compareTeams(L.teams[a], L.teams[b]) <= 0 ? a : b;
+          const lo = hi === a ? b : a;
+          nextW.push(seriesProb(pw, hi, lo) ? hi : lo);
+        }
+        winners = nextW;
+        round++;
+        alive = [];
+      }
+      if (round <= 4 && po.round === 4) {
+        const f = po.series.find((q) => q.round === 4);
+        if (f) { res[f.hi].final++; res[f.lo].final++; }
+      }
+      res[winners[0]].cup++;
+      continue;
+    }
+    for (const t of teams) res[t.id].pts += pts[t.id];
+    // Seed with simulated points
+    const fake: Record<string, Team> = {};
+    for (const t of teams) fake[t.id] = { ...t, rec: { ...t.rec, pts: pts[t.id], gp: 84, rw: rw[t.id] } };
+    const pic = playoffPicture({ ...L, teams: fake } as League);
+    bracket = [];
+    const round1: { hi: string; lo: string; wHi: number; wLo: number }[] = [];
+    for (const conf of ['E', 'W'] as const) {
+      const c = pic[conf];
+      const w1 = c.div1[0], w2 = c.div2[0];
+      const better = compareTeams(w1, w2) <= 0;
+      round1.push({ hi: w1.id, lo: (better ? c.wc[1] : c.wc[0]).id, wHi: 0, wLo: 0 });
+      round1.push({ hi: c.div1[1].id, lo: c.div1[2].id, wHi: 0, wLo: 0 });
+      round1.push({ hi: w2.id, lo: (better ? c.wc[0] : c.wc[1]).id, wHi: 0, wLo: 0 });
+      round1.push({ hi: c.div2[1].id, lo: c.div2[2].id, wHi: 0, wLo: 0 });
+      for (const x of [...c.div1, ...c.div2, ...c.wc]) res[x.id].po++;
+    }
+    bracket.push(round1);
+    let winners = round1.map((x) => (seriesProb(pw, x.hi, x.lo) ? x.hi : x.lo));
+    let round = 1;
+    while (winners.length > 1) {
+      round++;
+      if (round === 4) for (const w of winners) res[w].final++;
+      const nextW: string[] = [];
+      for (let i = 0; i < winners.length; i += 2) {
+        const a = winners[i], b = winners[i + 1];
+        const hi = pts[a] >= pts[b] ? a : b;
+        const lo = hi === a ? b : a;
+        nextW.push(seriesProb(pw, hi, lo) ? hi : lo);
+      }
+      winners = nextW;
+    }
+    res[winners[0]].cup++;
+  }
+  for (const id in res) {
+    res[id].po /= n;
+    res[id].cup /= n;
+    res[id].final /= n;
+    res[id].pts = inPlayoffs ? L.teams[id].rec.pts : res[id].pts / n;
+  }
+  return res;
+}
+
+/** Cup odds for the user team if lines/roster were as given (used for trade impact preview). */
+export function cupOddsFor(L: League, team: string, n = 300) {
+  return seasonOdds(L, n)[team]?.cup ?? 0;
+}

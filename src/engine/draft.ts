@@ -179,12 +179,27 @@ function mock(L: League, year: number, salt: number) {
   return pool.slice(0, 32).map((p) => p.id);
 }
 
+let gNeedCache: { date: string; need: Record<string, boolean> } | null = null;
+function goalieNeed(L: League, team: string) {
+  if (!gNeedCache || gNeedCache.date !== L.date) {
+    const cnt: Record<string, number> = {};
+    for (const id in L.players) {
+      const x = L.players[id];
+      if (x.team && x.pos === 'G' && ageOn(x.bd, L.date) <= 25) cnt[x.team] = (cnt[x.team] ?? 0) + 1;
+    }
+    const need: Record<string, boolean> = {};
+    for (const t of Object.keys(L.teams)) need[t] = (cnt[t] ?? 0) < 2;
+    gNeedCache = { date: L.date, need };
+  }
+  return gNeedCache.need[team];
+}
+
 /** AI team's valuation of a prospect (team-specific noise models different scouting staffs). */
 function aiValue(L: League, team: string, p: Player, year: number) {
   const scout = L.teams[team].staff.scouting;
   const noise = (hash01(p.id, team.charCodeAt(0) * 31 + team.charCodeAt(1) * 7 + team.charCodeAt(2)) - 0.5) * (12 - scout * 2.5);
   const t = L.teams[team];
-  const needG = Object.values(L.players).filter((x) => x.team === team && x.pos === 'G' && ageOn(x.bd, L.date) <= 25).length < 2;
+  const needG = goalieNeed(L, team);
   let v = p.pot * 0.8 + p.ovr * 0.2 + noise;
   if (p.pos === 'G') v -= needG ? 1 : 4; // goalies are risky picks
   if (t.strategy === 'contend') v += (p.ovr - 60) * 0.05;

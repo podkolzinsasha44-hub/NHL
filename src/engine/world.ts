@@ -95,6 +95,7 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
     album: [],
     flags: {},
     lotteryWins: {},
+    dead: [],
     tmpl: [],
     seasonLog: { trades: 0, signings: 0, spent: 0, userGames: { w: 0, l: 0 } },
   };
