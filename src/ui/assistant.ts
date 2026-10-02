@@ -1,7 +1,7 @@
 import { capSpace } from '../engine/contracts';
 import { draftPool } from '../engine/draft';
 import type { League, Player } from '../engine/types';
-import { ageOn, daysBetween } from '../engine/util';
+import { ageOn, capOf, daysBetween } from '../engine/util';
 import { money } from './format';
 
 export interface Tip {
@@ -19,12 +19,17 @@ export function assistantTips(L: League): Tip[] {
   const nhl = mine.filter((p) => p.st === 'NHL');
   const space = capSpace(L, L.user);
   if (space < 0) tips.push({ id: 'cap', icon: '⚠️', level: 'bad', title: 'Превышен потолок зарплат', text: `Перерасход ${money(-space)}. Отправьте игрока в АХЛ, обменяйте контракт или выкупите его.`, action: { label: 'Финансы', tab: 'more', route: 'finance' } });
+  const floor = L.meta.floor[L.season] ?? 0;
+  const hit = capOf(L) - space;
+  if (floor && hit < floor && (L.phase === 'regular' || L.phase === 'preseason' || L.phase === 'offseason')) tips.push({ id: 'floor', icon: '📉', level: 'warn', title: 'Ниже нижней границы потолка', text: `Платёжная ведомость ${money(hit)} при минимуме ${money(floor)}. Подпишите свободных агентов или возьмите контракты в обменах.`, action: { label: 'Свободные агенты', tab: 'market', route: 'market', params: { tab: 'fa' } } });
   const want = mine.filter((p) => p.wantsTrade);
   if (want.length) tips.push({ id: 'want', icon: '😤', level: 'warn', title: `${want[0].fn} ${want[0].ln} просит обмен`, text: 'Недовольный игрок играет хуже и портит атмосферу. Поищите вариант обмена или дайте ему больше игрового времени.', action: { label: 'К игроку', tab: 'roster', route: 'player', params: { id: want[0].id } } });
   const expStars = nhl.filter((p) => p.c && p.c.last === L.season && !p.ext && p.ovr >= 78).sort((a, b) => b.ovr - a.ovr);
   if (expStars.length && L.phase !== 'freeagency') tips.push({ id: 'exp', icon: '✍️', level: 'warn', title: `Истекает контракт: ${expStars[0].ln}${expStars.length > 1 ? ` и ещё ${expStars.length - 1}` : ''}`, text: 'Продлите ключевых игроков заранее — летом на рынке их перехватят.', action: { label: 'Продления', tab: 'market', route: 'market', params: { tab: 'ext' } } });
   const counts = { F: 0, D: 0, G: 0 };
   for (const p of nhl) if (!p.inj) counts[p.pos === 'G' ? 'G' : p.pos === 'D' ? 'D' : 'F']++;
+  const healthyNhl = nhl.filter((p) => !p.inj).length;
+  if ((L.phase === 'regular' || L.phase === 'preseason') && healthyNhl > 23) tips.push({ id: 'over23', icon: '📋', level: 'warn', title: `В основе ${healthyNhl} здоровых игроков`, text: 'По правилам НХЛ в активном составе не больше 23. Отправьте лишних в АХЛ — молодых можно без драфта отказов.', action: { label: 'Состав', tab: 'roster', route: 'roster', params: { view: 'nhl' } } });
   if ((L.phase === 'regular' || L.phase === 'preseason') && (counts.F < 12 || counts.D < 6 || counts.G < 2)) tips.push({ id: 'holes', icon: '🩹', level: 'warn', title: 'Не хватает здоровых игроков', text: `Нападающих ${counts.F}/12, защитников ${counts.D}/6, вратарей ${counts.G}/2. Вызовите кого-то из АХЛ или подпишите свободного агента.`, action: { label: 'Состав', tab: 'roster' } });
   if (L.phase === 'regular' && L.date <= L.deadline && daysBetween(L.date, L.deadline) <= 21) {
     const st = L.teams[L.user].strategy;

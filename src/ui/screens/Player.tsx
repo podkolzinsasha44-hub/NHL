@@ -100,6 +100,10 @@ function Actions({ L, p }: { L: League; p: Player }) {
     btns.push(<Button key="sc" onClick={() => { const ok = useGame.getState().act((L) => sendScout(L, p.id)); useGame.getState().toast(ok ? 'Скаут отправлен — отчёт уточнён' : 'Скауты заняты до следующей недели', ok ? 'good' : 'bad'); }}>Отправить скаута</Button>);
   }
   btns.push(<Button key="cmp" onClick={() => nav.push('compare', { a: p.id })}>Сравнить</Button>);
+  const ut = L.teams[L.user];
+  if (p.st === 'RET' && p.teams.includes(L.user) && p.num != null && careerSkater(p).gp >= 400 && !ut.retired.some((r) => r[0] === p.num)) {
+    btns.push(<Button key="ret" variant="gold" onClick={() => { useGame.getState().act((L) => L.teams[L.user].retired.push([p.num!, `${p.fn} ${p.ln}`, L.season])); useGame.getState().toast(`Номер ${p.num} навсегда закреплён за ${p.ln}`, 'good'); }}>Вывести №{p.num} из обращения</Button>);
+  }
   const bc = buyoutCost(L, p);
   return (
     <>

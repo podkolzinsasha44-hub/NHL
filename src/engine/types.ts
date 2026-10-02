@@ -159,6 +159,8 @@ export interface Team {
   canada: boolean;
   bigMarket: boolean;
   lastGame?: string;
+  /** Playing style set by the coach/GM. */
+  tactic?: 'attack' | 'balanced' | 'defense';
   last: { w: number; l: number; otl: number; pts: number; gf: number; ga: number } | null;
   lines: Lines;
   rec: Record_;
@@ -429,6 +431,10 @@ export interface League {
   /** Album: all players who played for the user's team. */
   album: number[];
   lotteryWins: Record<string, number[]>;
+  /** Points snapshot at the start of the month (player of the month). */
+  monthSnap?: Record<number, number>;
+  /** Weekly projection history for the user team: [date, playoffs, cup]. */
+  oddsHist?: [string, number, number][];
   /** Dead cap from buyouts. */
   dead: { team: string; season: number; amount: number; name: string }[];
   /** Seen glossary / tutorial flags */

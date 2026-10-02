@@ -132,13 +132,15 @@ function buildSide(L: League, team: Team, home: boolean, opts: { playoff: boolea
     return s;
   };
   const coachAdj = (team.coach.rating - 72) * 0.07;
+  const tOff = team.tactic === 'attack' ? 1.1 : team.tactic === 'defense' ? -1.0 : 0;
+  const tDef = team.tactic === 'attack' ? -1.0 : team.tactic === 'defense' ? 1.1 : 0;
   const leaders = [...ln.f.flat(), ...ln.d.flat()].some((id) => P(id)?.tr.includes('leader')) ? 0.4 : 0;
   const fl = ln.f.map((line) => line.map(S));
   const dp = ln.d.map((pair) => pair.map(S));
   const es = fl.map((line) => dp.map((pair) => {
     const u = unit([...line, ...pair]);
-    u.off += coachAdj + leaders;
-    u.def += coachAdj + leaders;
+    u.off += coachAdj + leaders + tOff;
+    u.def += coachAdj + leaders + tDef;
     return u;
   }));
   const pp = ln.pp.map((u) => unit(u.map(S), true));

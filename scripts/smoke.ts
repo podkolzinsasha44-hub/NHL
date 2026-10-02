@@ -24,6 +24,7 @@ while (L.history.length < N && days < 400 * N) {
     L.flags[`report${L.season}`] = true;
     const h = L.history[0];
     const caps = Object.keys(L.teams).map((t) => capHit(L, t) / 1e6);
+    const ids = Object.keys(L.teams); console.log("   min team", ids[caps.indexOf(Math.min(...caps))], "max team", ids[caps.indexOf(Math.max(...caps))]);
     console.log(`\n== ${h.season}: champion ${h.champion}, finalist ${h.finalist}, presidents ${h.presidents}, user ${JSON.stringify(h.userRecord)}`);
     console.log(`   top scorer ${h.topScorer?.name} ${h.topScorer?.pts}; trades ${L.trades.length}; FA left ${freeAgents(L).length}; players ${Object.keys(L.players).length}`);
     console.log(`   cap hits min ${Math.min(...caps).toFixed(1)} max ${Math.max(...caps).toFixed(1)} (cap ${(L.meta.cap[L.season] ?? 0) / 1e6}); phase ${L.phase} date ${L.date}`);

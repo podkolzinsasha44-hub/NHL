@@ -35,9 +35,11 @@ function GameShell() {
     market: L.offers.length || undefined,
   };
   const ModalComp = modal ? MODALS[modal.name] : null;
+  const month = Number(L.date.slice(5, 7));
+  const mood = L.phase === 'playoffs' ? 'playoffs' : month === 12 || month <= 2 ? 'winter' : '';
   return (
     <>
-      <div className="arena" />
+      <div className="arena" data-mood={mood} />
       <div className="fixed inset-0 overflow-hidden">
         <AnimatePresence initial={false} custom={dir} mode="popLayout">
           <motion.div

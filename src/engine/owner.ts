@@ -28,7 +28,9 @@ export function evaluateSeason(L: League, playoffRound: number, pointsNow: numbe
   else delta = (playoffRound - need[o.goal]) * 12 + (playoffRound >= need[o.goal] ? 8 : -6);
   if (playoffRound === 5) delta += 30;
   // Difficulty: owners are harsher on Hardcore
-  const mul = L.settings.difficulty === 'rookie' ? 0.6 : L.settings.difficulty === 'hard' ? 1.3 : 1;
+  let mul = L.settings.difficulty === 'rookie' ? 0.6 : L.settings.difficulty === 'hard' ? 1.3 : 1;
+  // Big hockey markets: the media and fans push the owner harder.
+  if (L.teams[L.user].bigMarket) mul *= 1.15;
   delta = delta < 0 ? delta * mul : delta / mul;
   o.trust = clamp(Math.round(o.trust + delta), 0, 100);
   return Math.round(delta);

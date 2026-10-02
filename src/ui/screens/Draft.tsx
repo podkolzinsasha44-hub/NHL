@@ -70,6 +70,20 @@ export function DraftScreen() {
         </div>
       ) : <Empty icon="📋" title="Board пуст" text="Добавляйте проспектов звёздочкой из рейтинга. Если не успеете выбрать сами, ассистент возьмёт лучшего из вашего списка." />)}
       {tab === 'mine' && <MyProspects L={L} />}
+      {tab === 'rank' && L.draft?.mocks && !L.draft.done && (
+        <>
+          <SectionTitle>Мок-драфты экспертов</SectionTitle>
+          <div className="grid grid-cols-2 gap-2">
+            {L.draft.mocks.map((m) => (
+              <Card key={m.name} className="!p-3">
+                <div className="text-[12px] text-muted mb-1.5">{m.name}</div>
+                {m.picks.slice(0, 5).map((id, i) => <div key={id} className="text-[13px] truncate"><span className="num text-muted mr-1.5">{i + 1}</span>{L.players[id]?.ln}</div>)}
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+      {tab === 'rank' && <Redraft L={L} />}
       {tab === 'order' && <LotteryOdds L={L} />}
     </Screen>
   );
@@ -95,6 +109,29 @@ function ProspectRow({ L, p, rank, onBoard, toggle }: { L: League; p: Player; ra
       <button onClick={toggle} className="press w-10 h-11 flex items-center justify-center" aria-label="В board"><Icon name="star" size={20} className={onBoard ? 'text-gold fill-gold' : 'text-faint'} /></button>
       <button onClick={() => { const ok = useGame.getState().act((L) => sendScout(L, p.id)); useGame.getState().toast(ok ? `Скаут поехал смотреть ${p.ln}` : 'Все скауты заняты до понедельника', ok ? 'good' : 'bad'); }} className="press w-10 h-11 flex items-center justify-center text-[17px]" aria-label="Скаут">🔭</button>
     </div>
+  );
+}
+
+/** Re-ranking of a draft class a few years later by current rating. */
+function Redraft({ L }: { L: League }) {
+  const years = [...new Set(Object.values(L.players).filter((p) => p.dr && p.dr.y <= L.season - 2 && p.dr.y >= 2027).map((p) => p.dr!.y))].sort((a, b) => b - a);
+  if (!years.length) return null;
+  const y = years[0];
+  const cls = Object.values(L.players).filter((p) => p.dr?.y === y).sort((a, b) => b.ovr - a.ovr).slice(0, 10);
+  return (
+    <>
+      <SectionTitle>Передрафт {y}: кого надо было брать</SectionTitle>
+      <Card pad={false} className="overflow-hidden">
+        {cls.map((p, i) => (
+          <div key={p.id} className={cx('flex items-center gap-3 px-3 h-11 text-[14px]', i && 'border-t hairline', p.dr?.t === L.user && 'bg-[color-mix(in_oklab,var(--accent)_14%,transparent)]')}>
+            <span className="num w-5 text-muted text-right">{i + 1}</span>
+            <span className="flex-1 truncate">{p.fn[0]}. {p.ln}</span>
+            <span className="text-[12px] text-muted">был №{p.dr?.p} ({p.dr?.t})</span>
+            <span className="num w-8 text-right">{p.ovr}</span>
+          </div>
+        ))}
+      </Card>
+    </>
   );
 }
 
@@ -251,8 +288,7 @@ export function LotteryModal() {
       <div className="relative scroll flex-1 px-4">
         <div className="text-center text-muted text-[13.5px] mb-4">Конверты вскрываются с 16-го места к 1-му</div>
         <div className="flex flex-col gap-2">
-          {reveal.slice(0, step).map((t, i) => {
-            const place = 16 - i;
+          {reveal.slice(0, step).map((t, i) => ({ t, place: 16 - i })).reverse().map(({ t, place }) => {
             const moved = D?.lottery?.find((x) => x.team === t);
             return (
               <motion.div key={t} initial={{ opacity: 0, x: 40, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} className={cx('glass rounded-2xl h-14 px-3 flex items-center gap-3', place <= 2 && 'border-gold/60', t === L.user && 'border-[var(--accent)]')}>

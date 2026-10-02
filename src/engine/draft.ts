@@ -86,7 +86,8 @@ export function draftPool(L: League, year: number): Player[] {
 /** The user's view of a prospect's potential: a range that narrows with scouting. */
 export function potRange(L: League, p: Player): [number, number] {
   if (p.team === L.user && p.st === 'NHL') return [p.pot, p.pot];
-  const know = L.scouting.know[p.id] ?? (p.real && p.st === 'NHL' ? 0.85 : 0.15);
+  const analytics = L.teams[L.user]?.staff.analytics ?? 2;
+  const know = L.scouting.know[p.id] ?? (p.real && p.st === 'NHL' ? 0.78 + analytics * 0.05 : 0.08 + analytics * 0.05);
   const width = Math.round((1 - know) * 14) + 2;
   const bias = (hash01(p.id, 77) - 0.5) * (1 - know) * 10;
   const center = p.pot + bias;

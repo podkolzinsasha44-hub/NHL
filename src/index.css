@@ -187,6 +187,26 @@ button {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
 }
 
+.arena[data-mood="playoffs"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(90% 45% at 50% 0%, rgba(232, 194, 106, 0.22), transparent 70%);
+}
+.arena[data-mood="winter"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 20%, #fff, transparent), radial-gradient(1.5px 1.5px at 40% 70%, #fff, transparent), radial-gradient(1px 1px at 85% 60%, #fff, transparent), radial-gradient(1px 1px at 10% 85%, #fff, transparent);
+  background-size: 220px 220px;
+  animation: snow 18s linear infinite;
+}
+@keyframes snow {
+  from { background-position: 0 0; }
+  to { background-position: 0 440px; }
+}
+
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }

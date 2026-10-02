@@ -28,6 +28,7 @@ export function PlayerCard({ p, L, width = 260, interactive = true }: { p: Playe
   const [lo, hi] = potRange(L, p);
   const age = playerAge(L, p);
   const primary = t?.primary ?? '#1b2a44';
+  const potm = p.awards.some((a) => a.startsWith('potm:') && monthsAgo(a.slice(5), L.date) <= 1);
   const accent = t?.accent ?? '#7fd3ff';
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -47,7 +48,8 @@ export function PlayerCard({ p, L, width = 260, interactive = true }: { p: Playe
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: 'spring', stiffness: 200, damping: 22 }}
       >
-        {tier !== 'legend' && <div className="absolute inset-0 rounded-[28px]" style={{ background: TIER_BORDER[tier] }} />}
+        {tier !== 'legend' && <div className="absolute inset-0 rounded-[28px]" style={{ background: potm ? 'linear-gradient(140deg,#ff8ad8,#7fd3ff 50%,#e8c26a)' : TIER_BORDER[tier] }} />}
+        {potm && <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-20 px-3 h-6 rounded-full text-[11px] font-bold tracking-widest uppercase flex items-center text-[#1a1306] shadow-lg" style={{ background: 'linear-gradient(90deg,#fff1c2,#e8c26a)' }}>★ Игрок месяца</div>}
         <div
           className={cx('relative w-full h-full rounded-[25px] overflow-hidden', tier !== 'bronze' && tier !== 'silver' && 'shine')}
           style={{ background: `linear-gradient(165deg, color-mix(in oklab, ${primary} 85%, #fff 6%) 0%, color-mix(in oklab, ${primary} 55%, #05070d) 48%, #070b14 100%)` }}
@@ -110,6 +112,12 @@ export function PlayerCard({ p, L, width = 260, interactive = true }: { p: Playe
       </motion.div>
     </div>
   );
+}
+
+function monthsAgo(ym: string, date: string) {
+  const [y, m] = ym.split('-').map(Number);
+  const [y2, m2] = date.slice(0, 7).split('-').map(Number);
+  return (y2 - y) * 12 + (m2 - m);
 }
 
 /** Small collectible-style tile used in albums and lists. */

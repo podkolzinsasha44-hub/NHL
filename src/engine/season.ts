@@ -7,11 +7,12 @@ import { compareTeams, emptyRecord, sortedTeams } from './standings';
 import { line, statKey } from './stats';
 import type { Game, GoalieLine, League, SkaterLine, Team } from './types';
 import { addDays, clamp } from './util';
-import { offseasonDaily } from './offseason';
+import { aiCapCompliance, offseasonDaily } from './offseason';
 import { weeklyScouting } from './draft';
 import { weeklyTradeActivity } from './trades';
 import { weeklyMorale, checkMilestones } from './events';
 import { pressConference } from './press';
+import { calendarEvents } from './calendar';
 
 export interface DayReport {
   date: string;
@@ -237,6 +238,7 @@ export function advanceDay(L: League): DayReport {
   }
 
   tickInjuries(L);
+  calendarEvents(L);
 
   // Weekly routines (Mondays)
   const dow = new Date(date + 'T12:00:00Z').getUTCDay();
@@ -247,8 +249,9 @@ export function advanceDay(L: League): DayReport {
       const byTeam = groupByTeam(L);
       for (const t of Object.values(L.teams)) if (t.id !== L.user) aiPromote(L, byTeam.get(t.id) ?? []);
       updateStrategies(L);
-      weeklyTradeActivity(L);
     }
+    if (L.phase === 'regular' || L.phase === 'offseason' || L.phase === 'preseason') weeklyTradeActivity(L);
+    if (L.phase === 'regular') aiCapCompliance(L, false);
   }
 
   offseasonDaily(L);

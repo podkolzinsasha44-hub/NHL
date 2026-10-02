@@ -116,6 +116,7 @@ export function MatchScreen({ params }: { params: Record<string, unknown> }) {
                   {e.team ? <TeamLogo id={e.team} size={22} /> : <div className="w-[22px]" />}
                   <div className={cx('flex-1 text-[14px]', e.type === 'goal' && 'font-semibold', e.type === 'period' && 'text-muted font-display uppercase text-[12px] tracking-wider')}>
                     {e.type === 'goal' ? `🚨 ${e.text}` : e.type === 'penalty' ? `⛔ ${e.text}` : e.text}
+                    {e.type === 'goal' && <div className="text-[12.5px] text-muted font-normal mt-0.5">{COMMENT[(e.t + (e.players?.[0] ?? 0)) % COMMENT.length]}</div>}
                   </div>
                   {e.score && e.type === 'goal' && <div className="num text-[15px]">{e.score[0]}:{e.score[1]}</div>}
                 </motion.div>
@@ -177,6 +178,19 @@ export function MatchScreen({ params }: { params: Record<string, unknown> }) {
     </div>
   );
 }
+
+const COMMENT = [
+  'Какой бросок! Вратарь даже не шелохнулся.',
+  'Добивание на пятаке — классика жанра.',
+  'Розыгрыш в одно касание, защита разорвана!',
+  'Бросок в «домик» — без шансов.',
+  'Шайба проходит через частокол ног!',
+  'Выход один на один — и холодная реализация.',
+  'Щелчок с синей линии, вратарь закрыт.',
+  'Подставил клюшку под бросок — и шайба в сетке.',
+  'Трибуны взрываются!',
+  'Перехват в средней зоне и мгновенный отрыв.',
+];
 
 function fmtT(t: number) {
   const s = t % 1200;

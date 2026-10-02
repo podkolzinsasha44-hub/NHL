@@ -8,6 +8,11 @@ import { registerSW } from 'virtual:pwa-register';
 
 registerSW({ immediate: true });
 
+// Debug hooks (used by automated UI checks)
+import { useGame } from './store/game';
+import { useNav } from './store/nav';
+(window as unknown as { __nhl: unknown }).__nhl = { game: useGame, nav: useNav };
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

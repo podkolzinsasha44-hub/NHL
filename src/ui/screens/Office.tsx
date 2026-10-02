@@ -1,11 +1,12 @@
 import { motion } from 'motion/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useL, useGame } from '../../store/game';
 import { useNav } from '../../store/nav';
 import { Screen, Icon, Sheet } from '../components/shell';
 import { Button, Card, cx, Meter, Pill, SectionTitle } from '../components/kit';
 import { TeamLogo } from '../components/media';
-import { Ring } from '../components/charts';
+import { Ring, Sparkline } from '../components/charts';
+import { daysBetween } from '../../engine/util';
 import { SimDock } from './SimOverlay';
 import { dateLong, dateShort, dow, money, phaseLabel, recordStr, seasonLabel } from '../format';
 import { nextUserGame } from '../../engine/season';
@@ -32,6 +33,14 @@ export function Office() {
   const [msg, setMsg] = useState<Message | null>(null);
   const lastGame = L.lastUserGame ? L.games.find((g) => g.id === L.lastUserGame && g.played) : null;
   const my = odds?.[L.user];
+  useEffect(() => {
+    if (!my || L.phase !== 'regular') return;
+    const h = L.oddsHist ?? [];
+    const last = h[h.length - 1];
+    if (!last || daysBetween(last[0], L.date) >= 7) {
+      useGame.getState().act((L) => { (L.oddsHist ??= []).push([L.date, my.po, my.cup]); if (L.oddsHist.length > 40) L.oddsHist.shift(); });
+    }
+  }, [L.date]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Screen
       title={t.name}
@@ -81,6 +90,12 @@ export function Office() {
               <div className="text-[12px] text-muted mt-0.5">Монте-Карло, 250 симуляций. Те же шансы, что использует движок.</div>
             </div>
           </div>
+          {(L.oddsHist?.length ?? 0) >= 3 && (
+            <div className="mt-3">
+              <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Шансы на плей-офф по неделям</div>
+              <Sparkline values={L.oddsHist!.slice(-14).map((x) => Math.round(x[1] * 100))} width={Math.min(330, window.innerWidth - 64)} height={46} />
+            </div>
+          )}
         </Card>
       )}
 
@@ -131,6 +146,7 @@ export function Office() {
           <div className="num text-[24px] leading-tight">{L.owner.trust}<span className="text-[13px] text-muted">/100</span></div>
           <Meter value={L.owner.trust} className="mt-1.5" color={L.owner.trust < 30 ? '#ff5a5f' : L.owner.trust < 55 ? '#ffb547' : '#3ddc97'} />
           <div className="text-[11.5px] text-muted mt-1.5 line-clamp-2">{L.owner.goalText}</div>
+          <div className="text-[11.5px] text-muted mt-1">Трибуны: {Math.round(70 + t.fans * 0.3)}% · {t.fans >= 70 ? '🔥 аншлаги' : t.fans >= 45 ? 'спокойно' : '😠 свист'}</div>
         </Card>
         <Card onClick={() => nav.go('more', 'finance')}>
           <div className="text-[11px] uppercase tracking-wider text-muted"><Term k="cap">Под потолком</Term></div>

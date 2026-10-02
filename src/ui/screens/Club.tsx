@@ -3,7 +3,7 @@ import { useGame, useL } from '../../store/game';
 import { useNav } from '../../store/nav';
 import type { Coach, League } from '../../engine/types';
 import { Screen } from '../components/shell';
-import { Button, Card, Chips, cx, Meter, Pill, SectionTitle, Stat } from '../components/kit';
+import { Button, Card, Chips, cx, Meter, Pill, SectionTitle, Segmented, Stat } from '../components/kit';
 import { PlayerRow } from '../components/rows';
 import { TeamLogo } from '../components/media';
 import { capHit, capSpace, extensionOf } from '../../engine/contracts';
@@ -122,6 +122,11 @@ export function StaffScreen() {
             ))}
           </div>
         )}
+      </Card>
+      <SectionTitle>Стиль игры</SectionTitle>
+      <Card>
+        <Segmented value={t.tactic ?? 'balanced'} onChange={(v) => act((L) => (L.teams[L.user].tactic = v))} options={[{ v: 'attack', label: 'Атака' }, { v: 'balanced', label: 'Баланс' }, { v: 'defense', label: 'Оборона' }]} />
+        <div className="text-[12.5px] text-muted mt-2">{(t.tactic ?? 'balanced') === 'attack' ? 'Больше моментов у чужих ворот — и у своих тоже. Подходит командам с сильными форвардами.' : (t.tactic ?? 'balanced') === 'defense' ? 'Плотная игра в обороне: меньше пропускаем, но и создаём меньше. Хорошо с сильным вратарём.' : 'Сбалансированный хоккей без перекосов.'}</div>
       </Card>
       <SectionTitle>Службы клуба</SectionTitle>
       <div className="flex flex-col gap-2">

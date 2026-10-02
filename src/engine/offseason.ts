@@ -18,7 +18,7 @@ import type { League, Player, SkaterLine } from './types';
 import { addDays, ageOn, clamp, minSalaryOf } from './util';
 import { buildSeasonGames, pickCaptain } from './world';
 import { updateStrategies } from './ai';
-import { regradeTrades } from './trades';
+import { regradeTrades, weeklyTradeActivity } from './trades';
 import { checkAchievements } from './achievements';
 
 const md = (L: League) => L.date.slice(5);
@@ -43,6 +43,7 @@ export function offseasonDaily(L: League) {
     return;
   }
   if (L.phase === 'draft') {
+    for (let i = 0; i < 4; i++) weeklyTradeActivity(L);
     if (L.draft && !L.draft.done) runDraftUntilUser(L, true);
     L.phase = 'offseason';
     aiSignDraftees(L);
@@ -273,7 +274,7 @@ function camp(L: League) {
 }
 
 /** AI teams over the cap bury their worst contracts in the AHL. */
-function aiCapCompliance(L: League) {
+export function aiCapCompliance(L: League, floor = true) {
   for (const t of Object.values(L.teams)) {
     if (t.id === L.user) continue;
     let guard = 0;
@@ -285,7 +286,7 @@ function aiCapCompliance(L: League) {
       cand.st = 'AHL';
     }
     // Still over: buy out the worst value contract
-    if (capSpace(L, t.id) < 0) {
+    if (floor && capSpace(L, t.id) < 0) {
       const worst = Object.values(L.players)
         .filter((p) => p.team === t.id && p.c && p.c.clause !== 'NMC' && p.c.type !== 'ELC')
         .sort((a, b) => (b.c!.aav - marketValue(L, b)) - (a.c!.aav - marketValue(L, a)))[0];
@@ -293,12 +294,12 @@ function aiCapCompliance(L: League) {
     }
     // Under the floor: sign one-year deals until compliant
     let g2 = 0;
-    while (capHit(L, t.id) < floorOf(L) && g2++ < 5) {
-      const fa = freeAgents(L).find((p) => p.ovr >= 66);
+    while (floor && capHit(L, t.id) < floorOf(L) && g2++ < 14) {
+      const fa = freeAgents(L).find((p) => p.ovr >= 64);
       if (!fa) break;
-      const aav = Math.max(minSalaryOf(L), Math.round(Math.min(floorOf(L) - capHit(L, t.id) + 500_000, marketValue(L, fa) * 1.3) / 25_000) * 25_000);
+      const aav = Math.max(minSalaryOf(L), Math.round(Math.min(floorOf(L) - capHit(L, t.id) + 500_000, marketValue(L, fa) * 1.7) / 25_000) * 25_000);
       signFA(L, fa, { team: t.id, aav, years: 1, clause: null, day: L.date });
     }
-    autoLines(L, t);
+    if (floor || guard > 1) autoLines(L, t);
   }
 }

@@ -374,8 +374,8 @@ export function regradeTrades(L: League) {
 export function weeklyTradeActivity(L: League) {
   if (!tradesOpen(L)) return;
   const nearDeadline = L.phase === 'regular' && L.date >= addDays(L.deadline, -14);
-  const n = nearDeadline ? 3 : 1;
-  for (let i = 0; i < n; i++) if (next() < 0.55) aiToAiTrade(L);
+  const n = nearDeadline ? 6 : 2;
+  for (let i = 0; i < n; i++) if (next() < 0.8) aiToAiTrade(L);
   if (next() < (nearDeadline ? 0.6 : 0.3)) offerToUser(L);
   // Expire old offers
   L.offers = L.offers.filter((o) => o.expires >= L.date);
@@ -398,12 +398,16 @@ function aiToAiTrade(L: League) {
   const give: TradeAsset = { players: [target.id], picks: [] };
   const price = askPriceFrom(L, seller.id, buyer.id, give);
   if (!price) return;
-  if (!checkTrade(L, seller.id, buyer.id, give, price).ok) return;
+  if (!checkTrade(L, seller.id, buyer.id, give, price).ok) {
+    // Sellers often eat part of the salary to make a deal fit under the buyer's cap.
+    give.retain = { [target.id]: 0.5 };
+    if (!checkTrade(L, seller.id, buyer.id, give, price).ok) return;
+  }
   const gSeller = packageValue(L, price, seller.id) - packageValue(L, give, seller.id);
   const gBuyer = packageValue(L, give, buyer.id) - packageValue(L, price, buyer.id);
   const vGive = packageValue(L, give, buyer.id);
   // Both sides must gain by their own valuation, and nobody gets fleeced by a wide margin.
-  if (gSeller >= 0 && gBuyer >= -1 && gBuyer <= vGive * 0.35) executeTrade(L, seller.id, buyer.id, give, price);
+  if (gSeller >= 0 && gBuyer >= -1 && gBuyer <= vGive * 0.6) executeTrade(L, seller.id, buyer.id, give, price);
 }
 
 /** Like askPrice but between two AI teams: what `seller` wants from `buyer`. */
