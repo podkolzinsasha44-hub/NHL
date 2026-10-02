@@ -40,12 +40,14 @@ npm run data:build   # пересчитывает public/data/world.json
 
 ## Выкладка на Firebase Hosting
 
-1. Создайте проект в [Firebase Console](https://console.firebase.google.com/) и включите **Hosting**.
-2. Вариант А (рекомендуется, автодеплой из GitHub):
-   - выполните `npx firebase-tools init hosting:github` в папке проекта — команда сама создаст сервисный аккаунт и секрет `FIREBASE_SERVICE_ACCOUNT` в репозитории;
-   - в настройках репозитория (Settings → Secrets and variables → Actions → Variables) добавьте переменную `FIREBASE_PROJECT_ID` с ID проекта;
-   - после этого каждый push в `main` выкладывает игру, а каждый PR получает превью-ссылку.
-3. Вариант Б (вручную): скопируйте `.firebaserc.example` в `.firebaserc`, впишите ID проекта и выполните `npm run deploy`.
+Проект Firebase: `nhl123-c439b`, адрес игры: **https://nhl123-c439b.web.app**.
+
+1. В Firebase Console: **Hosting and serverless → Hosting → Get started** (прокликать шаги до конца, устанавливать ничего не нужно).
+2. **Settings → Project settings → Service accounts → Generate new private key** — скачается JSON-ключ. Никому его не пересылайте и не добавляйте в репозиторий.
+3. В GitHub: **Settings → Secrets and variables → Actions → New repository secret**, имя `FIREBASE_SERVICE_ACCOUNT`, значение — всё содержимое JSON-файла.
+4. Любой push в `main` (или в ветку разработки) соберёт игру, прогонит тесты и выложит её. Pull request получает превью-ссылку.
+
+Вручную (если установлен Node.js): `npx firebase-tools login`, затем `npm run deploy`.
 
 ## Документы
 

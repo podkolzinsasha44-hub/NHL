@@ -2,7 +2,7 @@ name: Build & deploy to Firebase Hosting
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/funny-dijkstra-8xyszz]
   pull_request:
   workflow_dispatch:
 
@@ -26,18 +26,25 @@ jobs:
 
   deploy:
     needs: build
-    # Deploys only when the Firebase project is configured (repository variable + secret).
-    if: ${{ vars.FIREBASE_PROJECT_ID != '' }}
     runs-on: ubuntu-latest
+    env:
+      # Deploys only once the Firebase service-account key is added as a repository secret.
+      HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
+      - name: Firebase key missing
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::Add the FIREBASE_SERVICE_ACCOUNT secret to deploy (see README)."
       - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
       - uses: actions/download-artifact@v4
+        if: env.HAS_KEY == 'true'
         with:
           name: dist
           path: dist
       - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: env.HAS_KEY == 'true'
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
-          channelId: ${{ github.event_name == 'push' && 'live' || '' }}
+          projectId: nhl123-c439b
+          channelId: ${{ github.event_name == 'pull_request' && '' || 'live' }}
