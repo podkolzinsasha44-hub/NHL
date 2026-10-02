@@ -11,6 +11,7 @@ import { offseasonDaily } from './offseason';
 import { weeklyScouting } from './draft';
 import { weeklyTradeActivity } from './trades';
 import { weeklyMorale, checkMilestones } from './events';
+import { pressConference } from './press';
 
 export interface DayReport {
   date: string;
@@ -173,6 +174,7 @@ function applyGame(L: League, g: Game, box: MatchBox) {
     else L.seasonLog.userGames.l++;
     const t = L.teams[L.user];
     t.fans = clamp(t.fans + (won ? 0.6 : -0.6) * (playoff ? 3 : 1), 0, 100);
+    if (!playoff && (t.rec.streak === 'L5' || t.rec.streak === 'W5')) pressConference(L, t.rec.streak === 'L5' ? 'losing' : 'winning');
   }
 
   checkMilestones(L, box);
@@ -209,6 +211,7 @@ export function advanceDay(L: League): DayReport {
   if (L.phase === 'regular' || L.phase === 'playoffs') {
     if (date === addDays(L.deadline, -1) && L.phase === 'regular') {
       pushMsg(L, { from: 'Ассистент GM', kind: 'staff', title: 'Завтра дедлайн обменов', body: 'Это последний шанс усилить состав (или распродать активы) до конца сезона. После дедлайна обмены закрыты до окончания плей-офф.' });
+      pressConference(L, 'deadline');
       L.stops.push('deadline');
     }
     const byTeam = groupByTeam(L);

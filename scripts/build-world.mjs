@@ -532,7 +532,12 @@ for (const id of allIds) {
   let st, team;
   if (rTeam) { st = 'NHL'; team = rTeam; }
   else if (pTeam) { team = pTeam; st = statusFromLeague(last?.leagueAbbrev); }
-  else if (d.isActive && d.currentTeamAbbrev && teamIndex[d.currentTeamAbbrev] != null) { team = d.currentTeamAbbrev; st = 'AHL'; }
+  else if (d.isActive && d.currentTeamAbbrev && teamIndex[d.currentTeamAbbrev] != null) {
+    // Off the active roster but under contract: injured regulars (IR/LTIR) stay NHL players.
+    team = d.currentTeamAbbrev;
+    const lastNhl = (SK.summary[id]?.[20252026]?.gamesPlayed ?? 0) + (GO.summary[id]?.[20252026]?.gamesPlayed ?? 0);
+    st = lastNhl >= 30 ? 'NHL' : 'AHL';
+  }
   else {
     // Not in any organisation: free agent, in Europe, or retired.
     if (!last || last.season < 20242025 || age >= 39) continue;
@@ -585,6 +590,8 @@ for (const id of allIds) {
   p.c = contractFor(p, rnd) ?? estimateContract(p, rnd);
   if (p.c && (st === 'JR' || st === 'NCAA' || st === 'EUR' || st === 'FA') && !p.c.real) p.c = null;
   if (p.c?.real && st !== 'NHL' && st !== 'AHL') p.st = 'AHL';
+  // Expensive veterans off the active roster are almost always on long-term injured reserve.
+  if (p.st === 'AHL' && p.c && p.c.aav >= 3_000_000 && (p.car?.gp ?? 0) >= 150) { p.st = 'NHL'; p.ltir = true; }
   p.tr = traitsFor(p, m, ed, gm);
   if (ed?.skatingSpeed?.speedMax?.metric) p.spd = +ed.skatingSpeed.speedMax.metric.toFixed(1);
   if (ed?.topShotSpeed?.metric) p.shs = +ed.topShotSpeed.metric.toFixed(1);
@@ -597,11 +604,14 @@ for (const t of teams) {
   const fixed = roster.filter((p) => p.c.real || p.c.type === 'ELC');
   const flex = roster.filter((p) => !(p.c.real || p.c.type === 'ELC'));
   const rnd = hashRand(teamIndex[t.id] * 7919 + 13);
-  const target = CAP * (0.935 + rnd() * 0.06);
+  // Teams spend 92-99% of the cap; estimated deals stay close to market value.
+  const target = CAP * (0.92 + rnd() * 0.07);
   const fixedSum = fixed.reduce((a, p) => a + p.c.aav, 0);
   const flexSum = flex.reduce((a, p) => a + p.c.aav, 0);
   if (flexSum > 0) {
-    const k = clamp((target - fixedSum) / flexSum, 0.55, 1.6);
+    let k = clamp((target - fixedSum) / flexSum, 0.75, 1.15);
+    // Never start a team over the cap
+    if (fixedSum + flexSum * k > CAP * 0.995) k = Math.max(0.35, (CAP * 0.99 - fixedSum) / flexSum);
     for (const p of flex) p.c.aav = clamp(round((p.c.aav * k) / 5000) * 5000, MIN_SALARY, MAX_SALARY);
   }
   t.capUsed = roster.reduce((a, p) => a + p.c.aav, 0);

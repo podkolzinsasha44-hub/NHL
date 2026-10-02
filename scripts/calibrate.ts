@@ -17,6 +17,7 @@ const acc = {
   topPts: [] as number[], botPts: [] as number[], topScorer: [] as number[], topGoals: [] as number[],
   presCup: 0, favSeries: 0, series: 0, bestPowerCup: 0, injuriesDays: 0, sdPts: [] as number[], corr: [] as number[],
   champs: {} as Record<string, number>,
+  fit: [] as [number, number][],
 };
 
 const t0 = Date.now();
@@ -30,6 +31,7 @@ for (let i = 0; i < N; i++) {
   }
   for (const g of L.games) {
     if (!g.played || g.series) continue;
+    acc.fit.push([power[g.h] - power[g.a], (g.hs ?? 0) > (g.as ?? 0) ? 1 : 0]);
     acc.games++;
     acc.goals += (g.hs ?? 0) + (g.as ?? 0);
     if (g.ot === 'OT') acc.ot++;
@@ -93,6 +95,18 @@ for (const [name, v, real, lo, hi] of rows) {
   if (!ok) fails++;
   console.log(`${ok ? '✅' : '❌'} ${name.padEnd(30)} ${v.toFixed(3).padStart(9)}   real ${real.padEnd(10)} [${lo}–${hi}]`);
 }
+let best = { k: 0, h: 0, ll: -Infinity };
+for (let k = 0.05; k <= 0.5; k += 0.005) {
+  for (let h = 0; h <= 1.5; h += 0.02) {
+    let ll = 0;
+    for (const [x, y] of acc.fit) {
+      const p = 1 / (1 + Math.exp(-k * (x + h)));
+      ll += y ? Math.log(p) : Math.log(1 - p);
+    }
+    if (ll > best.ll) best = { k, h, ll };
+  }
+}
+console.log(`Projection fit: K=${best.k.toFixed(3)} HOME=${best.h.toFixed(2)}`);
 console.log('Best preseason team won Cup %', ((acc.bestPowerCup / N) * 100).toFixed(1));
 console.log('Champions:', Object.entries(acc.champs).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}:${n}`).join(' '));
 process.exit(fails ? 1 : 0);

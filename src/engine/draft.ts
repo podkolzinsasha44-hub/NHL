@@ -91,7 +91,7 @@ export function potRange(L: League, p: Player): [number, number] {
   const bias = (hash01(p.id, 77) - 0.5) * (1 - know) * 10;
   const center = p.pot + bias;
   const lo = Math.round(Math.max(p.ovr, center - width / 2));
-  const hi = Math.round(Math.min(99, Math.max(lo + 1, center + width / 2)));
+  const hi = Math.round(Math.min(97, Math.max(lo + 1, center + width / 2)));
   return [lo, hi];
 }
 

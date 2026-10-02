@@ -2,6 +2,7 @@ import { pushMsg, pushNews, social } from './news';
 import { compareTeams, playoffPicture } from './standings';
 import type { Game, League, PlayoffSeries } from './types';
 import { addDays } from './util';
+import { pressConference } from './press';
 
 export function startPlayoffs(L: League, startDay: string) {
   const pic = playoffPicture(L);
@@ -64,7 +65,7 @@ export function onPlayoffGame(L: League, g: Game) {
       return 'final';
     }
     pushNews(L, { kind: 'league', title: `${L.teams[s.winner].name} проходят ${L.teams[loser].short} (${score})`, team: s.winner });
-    if (loser === L.user) L.stops.push('eliminated');
+    if (loser === L.user) { L.stops.push('eliminated'); pressConference(L, 'eliminated'); }
     if (s.winner === L.user) L.stops.push('series-won');
     // Round complete?
     const roundSeries = po.series.filter((x) => x.round === s.round);

@@ -4,7 +4,7 @@ import { teamPower } from './lines';
 import { playoffPicture, compareTeams } from './standings';
 import type { League, Team } from './types';
 
-export const PROJ = { K: 0.205, HOME: 0.62, OT: 0.25 };
+export const PROJ = { K: 0.17, HOME: 0.7, OT: 0.25, PO: 0.78 };
 
 let rngState = 123456789;
 const r = () => {
@@ -18,13 +18,14 @@ export function powers(L: League): Record<string, number> {
   return out;
 }
 
-export function winProb(pH: number, pA: number) {
-  return 1 / (1 + Math.exp(-PROJ.K * (pH - pA + PROJ.HOME)));
+export function winProb(pH: number, pA: number, playoff = false) {
+  // Playoff hockey is tighter (the engine damps talent gaps), so the curve is flatter.
+  return 1 / (1 + Math.exp(-PROJ.K * (playoff ? PROJ.PO : 1) * (pH - pA + PROJ.HOME)));
 }
 
 export function gameWinProb(L: League, home: string, away: string) {
   const P = powers(L);
-  return winProb(P[home], P[away]);
+  return winProb(P[home], P[away], L.phase === 'playoffs');
 }
 
 function seriesProb(pw: Record<string, number>, hi: string, lo: string, wHi = 0, wLo = 0, sims = 0): boolean {
@@ -33,7 +34,7 @@ function seriesProb(pw: Record<string, number>, hi: string, lo: string, wHi = 0,
   let a = wHi, b = wLo;
   while (a < 4 && b < 4) {
     const n = a + b;
-    const p = pattern[n] ? winProb(pw[hi], pw[lo]) : 1 - winProb(pw[lo], pw[hi]);
+    const p = pattern[n] ? winProb(pw[hi], pw[lo], true) : 1 - winProb(pw[lo], pw[hi], true);
     if (r() < p) a++; else b++;
   }
   return a === 4;

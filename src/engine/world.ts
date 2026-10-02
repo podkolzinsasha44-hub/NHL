@@ -1,7 +1,7 @@
 import { COACH_FIRST, COACH_LAST, OWNER_NAMES } from './names';
 import { genPlayer, personality, devType, POOL_LEAGUES, weightedCountry } from './gen';
 import { autoLines, emptyLines, teamPower } from './lines';
-import { getState, int, next, normal, pick, seedState, useState_ } from './rng';
+import { getState, hash01, int, next, normal, pick, seedState, useState_ } from './rng';
 import { emptyRecord } from './standings';
 import type { Contract, League, Player, Settings, Team } from './types';
 import { addDays, ageOn, clamp } from './util';
@@ -138,6 +138,11 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
       teams: w.team ? [w.team] : [],
       c: w.c ? { ...w.c, signed: w.c.signed ?? season - 1 } : null,
     };
+    if ((w as { ltir?: boolean }).ltir) {
+      const days = 90 + Math.floor(hash01(w.id, 5) * 120);
+      p.inj = { type: 'Длительная травма (LTIR)', days, total: days };
+    }
+    delete (p as { ltir?: boolean }).ltir;
     // Draft rights for unsigned prospects expire at 22 (new CBA) — at least one more season.
     if (p.team && !p.c && (p.st === 'JR' || p.st === 'NCAA' || p.st === 'EUR')) {
       const by = Number(p.bd.slice(0, 4));

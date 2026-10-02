@@ -8,6 +8,7 @@ import { sortedTeams } from './standings';
 import type { DraftPick, League, Player, Strategy, TradeAsset, TradeOffer, TradeRecord } from './types';
 import { addDays, ageOn, clamp, fullName } from './util';
 import { careerSkater } from './stats';
+import { pressConference } from './press';
 
 const STRAT: Record<Strategy, { d: number; ice: number; sur: number; pick: number }> = {
   contend: { d: 0.62, ice: 1.0, sur: 0.35, pick: 0.75 },
@@ -340,6 +341,7 @@ export function executeTrade(L: League, a: string, b: string, aGives: TradeAsset
     const userGrade = a === L.user ? rec.grades!.a : rec.grades!.b;
     L.teams[other].rel = clamp(L.teams[other].rel + (userGrade.startsWith('A') ? -6 : userGrade === 'B' || userGrade === 'B+' ? 2 : 4), 0, 100);
     const top = [...aGives.players, ...bGives.players].map((id) => L.players[id]).sort((x, y) => y.ovr - x.ovr)[0];
+    if (next() < 0.4) pressConference(L, 'trade');
     social(L, `Оценка сделки: ${L.teams[L.user].short} — ${userGrade}. ${userGrade.startsWith('A') ? 'Грабёж средь бела дня!' : userGrade.startsWith('B') ? 'Разумный обмен.' : 'Фанаты в недоумении.'}`, { kind: 'analyst', team: L.user, players: top ? [top.id] : [] });
   }
   return rec;
