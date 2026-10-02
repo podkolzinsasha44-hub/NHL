@@ -218,7 +218,7 @@ export function simulateMatch(L: League, home: Team, away: Team, o: MatchOpts = 
   const ev = (e: GameEvent) => { if (detail) events.push(e); };
 
   // Tighter checking in the playoffs: talent gaps matter a bit less.
-  const talent = playoff ? 0.8 : 1;
+  const talent = playoff ? 0.74 : 1;
   const shot = (att: Side, dfn: Side, u: Unit, opp: Unit, t: number, period: number, kind: 'EV' | 'PP' | 'SH' | '3v3', base: number, pBase: number) => {
     const n = poisson(base * Math.exp((K.KS * talent * (u.off - opp.def)) / 10) * (att.home ? K.HOME : 1));
     for (let i = 0; i < n; i++) {

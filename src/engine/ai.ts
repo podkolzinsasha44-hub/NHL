@@ -2,6 +2,8 @@ import { autoLines, available, teamPower, validateLines } from './lines';
 import { pushMsg, pushNews } from './news';
 import { sortedTeams } from './standings';
 import type { League, Player, Team } from './types';
+import { genPlayer } from './gen';
+import { minSalaryOf } from './util';
 import { ageOn } from './util';
 
 export function groupByTeam(L: League): Map<string, Player[]> {
@@ -62,6 +64,13 @@ export function manageRoster(L: League, team: Team, org: Player[], isUser: boole
       if (isUser) notes.push(`Из АХЛ вызван ${up.fn} ${up.ln} (${up.pos})`);
     }
   }
+  // Emergency: no healthy goalie anywhere in the organisation → sign one (like an EBUG call).
+  while (have.G < 2) {
+    const g = emergencyGoalie(L, team.id);
+    nhl.push(g);
+    have.G++;
+    if (isUser) notes.push(`Экстренно подписан вратарь ${g.fn} ${g.ln}`);
+  }
   // Roster limit: 23 healthy players (injured players don't count, like IR).
   const healthyNow = nhl.filter(available);
   if (!isUser && healthyNow.length > 23) {
@@ -97,6 +106,21 @@ export function manageRoster(L: League, team: Team, org: Player[], isUser: boole
   if (team.lines.auto || !isUser) autoLines(L, team, nhl);
   else notes.push(...validateLines(L, team, nhl));
   return notes;
+}
+
+function emergencyGoalie(L: League, team: string): Player {
+  let best: Player | null = null;
+  for (const id in L.players) {
+    const p = L.players[id];
+    if (p.pos === 'G' && !p.team && p.st === 'FA' && !p.inj && (!best || p.ovr > best.ovr)) best = p;
+  }
+  const g = best ?? genPlayer(L, { pos: 'G', age: 27, country: 'CAN', ovr: 58, pot: 58, league: 'ECHL', status: 'FA' });
+  g.team = team;
+  g.st = 'NHL';
+  g.c = { aav: minSalaryOf(L), last: L.season, type: 'STD', clause: null, exp: 'UFA', signed: L.season };
+  if (!g.teams.includes(team)) g.teams.push(team);
+  pushNews(L, { kind: 'sign', title: `${L.teams[team].short} экстренно подписывают вратаря ${g.fn} ${g.ln}`, team, players: [g.id] });
+  return g;
 }
 
 /** AI-only: swap an AHL player who is clearly better than the worst NHL regular. */

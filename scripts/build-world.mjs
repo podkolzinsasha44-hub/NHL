@@ -364,6 +364,14 @@ const W_POS = {
 };
 const ATTR = ['sk', 'sh', 'pa', 'ha', 'oi', 'di', 'ph', 'fo', 'dc', 'du'];
 
+function calcOvrFrom(pos, a) {
+  if (pos === 'G') return Math.round(0.3 * a.po + 0.3 * a.rf + 0.15 * a.rb + 0.05 * a.pk + 0.12 * a.cs + 0.08 * a.mn);
+  const w = W_POS[pos === 'C' ? 'C' : pos === 'D' ? 'D' : 'W'];
+  let v = 0;
+  for (const [k, wt] of Object.entries(w)) v += wt * a[k];
+  return Math.round(v);
+}
+
 function skaterAttrs(id, pos, ovr, m, ed, rnd, weightKg, age) {
   const g = pos === 'D' ? 'D' : 'F';
   const z = Z[g];
@@ -395,12 +403,22 @@ function skaterAttrs(id, pos, ovr, m, ed, rnd, weightKg, age) {
   if (g === 'D') { d.di += 4; d.sh -= 4; d.ph += 2; }
   const attrs = {};
   for (const k of ATTR) attrs[k] = ovr + (d[k] || 0);
-  // Re-center: weighted formula must equal target OVR.
+  // Re-center so the weighted formula equals the target OVR; softly compress the top end
+  // so elite players don't saturate at 99 in every skill.
   const w = W_POS[pos === 'C' ? 'C' : g === 'D' ? 'D' : 'W'];
-  let calc = 0;
-  for (const [k, v] of Object.entries(w)) calc += v * attrs[k];
-  const shift = ovr - calc;
-  for (const k of Object.keys(w)) attrs[k] += shift;
+  const keys = Object.keys(w).filter((k) => w[k] > 0);
+  for (let it = 0; it < 8; it++) {
+    let calc = 0;
+    for (const [k, v] of Object.entries(w)) calc += v * attrs[k];
+    const shift = ovr - calc;
+    for (const k of Object.keys(w)) attrs[k] += shift;
+    // Shrink positive deviations if any skill would exceed 99 (keeps the player's shape).
+    const maxA = Math.max(...keys.map((k) => attrs[k]));
+    if (maxA > 99 && maxA > ovr) {
+      const f = (99 - ovr) / (maxA - ovr);
+      for (const k of keys) if (attrs[k] > ovr) attrs[k] = ovr + (attrs[k] - ovr) * f;
+    }
+  }
   for (const k of ATTR) attrs[k] = clamp(round(attrs[k]), 25, 99);
   attrs.dc = clamp(round(70 + (d.dc || 0) + n(8)), 30, 99);
   attrs.du = clamp(round(78 + (d.du || 0) + n(10)), 40, 99);
@@ -449,7 +467,7 @@ function marketAav(ovr, age, pos) {
   let share = curve(SHARE_CURVE.map(([o, s]) => [o, s]), ovr);
   if (age >= 33) share *= 0.8;
   else if (age >= 31) share *= 0.92;
-  if (pos === 'G') share *= 0.95;
+  if (pos === 'G') share *= 0.88;
   return Math.max(MIN_SALARY, Math.min(MAX_SALARY, share * CAP));
 }
 
@@ -471,7 +489,7 @@ function estimateContract(p, rnd) {
   }
   let aav = marketAav(p.ovr, age, p.pos);
   // Contracts were signed on past performance and market — add noise.
-  aav *= 0.8 + rnd() * 0.4;
+  aav *= 0.88 + rnd() * 0.24;
   if (age <= 24) aav *= 0.85;
   aav = clamp(round(aav / 5000) * 5000, MIN_SALARY, MAX_SALARY);
   const maxYrs = age >= 35 ? 1 : age >= 32 ? 3 : 6;
@@ -581,6 +599,7 @@ for (const id of allIds) {
     ovr,
   };
   p.r = pos === 'G' ? goalieAttrs(ovr, gm, rnd) : skaterAttrs(id, pos, ovr, m, ed, rnd, p.wt, age);
+  p.ovr = calcOvrFrom(p.pos, p.r);
   if (d.draftDetails) p.dr = { y: d.draftDetails.year, r: d.draftDetails.round, p: d.draftDetails.overallPick, t: d.draftDetails.teamAbbrev };
   p.pot = potential(ovr, age, d.draftDetails, rnd);
   const ct = d.careerTotals?.regularSeason;
@@ -609,7 +628,7 @@ for (const t of teams) {
   const fixedSum = fixed.reduce((a, p) => a + p.c.aav, 0);
   const flexSum = flex.reduce((a, p) => a + p.c.aav, 0);
   if (flexSum > 0) {
-    let k = clamp((target - fixedSum) / flexSum, 0.75, 1.15);
+    let k = clamp((target - fixedSum) / flexSum, 0.75, 1.08);
     // Never start a team over the cap
     if (fixedSum + flexSum * k > CAP * 0.995) k = Math.max(0.35, (CAP * 0.99 - fixedSum) / flexSum);
     for (const p of flex) p.c.aav = clamp(round((p.c.aav * k) / 5000) * 5000, MIN_SALARY, MAX_SALARY);

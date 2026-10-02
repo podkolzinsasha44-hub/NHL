@@ -83,11 +83,17 @@ export function draftPool(L: League, year: number): Player[] {
   return out;
 }
 
+/** How well the user's staff knows a player (0..1). */
+export function knowOf(L: League, p: Player) {
+  const analytics = L.teams[L.user]?.staff.analytics ?? 2;
+  const nhlExp = (p.car?.gp ?? 0) >= 50 || p.st === 'NHL';
+  return L.scouting.know[p.id] ?? (nhlExp ? 0.78 + analytics * 0.05 : p.team === L.user ? 0.5 : 0.08 + analytics * 0.05);
+}
+
 /** The user's view of a prospect's potential: a range that narrows with scouting. */
 export function potRange(L: League, p: Player): [number, number] {
   if (p.team === L.user && p.st === 'NHL') return [p.pot, p.pot];
-  const analytics = L.teams[L.user]?.staff.analytics ?? 2;
-  const know = L.scouting.know[p.id] ?? (p.real && p.st === 'NHL' ? 0.78 + analytics * 0.05 : 0.08 + analytics * 0.05);
+  const know = knowOf(L, p);
   const width = Math.round((1 - know) * 14) + 2;
   const bias = (hash01(p.id, 77) - 0.5) * (1 - know) * 10;
   const center = p.pot + bias;
@@ -304,7 +310,7 @@ export function sendScout(L: League, playerId: number) {
 
 export function scoutReport(L: League, p: Player): string {
   const a = p.r as unknown as Record<string, number>;
-  const know = L.scouting.know[p.id] ?? 0.15;
+  const know = knowOf(L, p);
   if (know < 0.3) return 'Мы видели его слишком мало, чтобы делать выводы. Отправьте скаута.';
   const lines: string[] = [];
   if (p.pos === 'G') {

@@ -4,7 +4,7 @@ import { teamPower } from './lines';
 import { playoffPicture, compareTeams } from './standings';
 import type { League, Team } from './types';
 
-export const PROJ = { K: 0.17, HOME: 0.7, OT: 0.25, PO: 0.78 };
+export const PROJ = { K: 0.18, HOME: 0.6, OT: 0.25, PO: 0.72 };
 
 let rngState = 123456789;
 const r = () => {
