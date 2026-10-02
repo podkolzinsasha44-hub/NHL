@@ -43,7 +43,8 @@ export function Office() {
   }, [L.date]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Screen
-      title={t.name}
+      title="Офис GM"
+      subtitle={`${L.gm.name} · ${dateLong(L.date)}`}
       right={
         <button onClick={() => nav.push('inbox')} className="press relative w-11 h-11 flex items-center justify-center rounded-full glass" aria-label="Входящие">
           <Icon name="mail" size={21} />
@@ -224,7 +225,7 @@ function NextGameCard() {
           </div>
         </div>
         <div className="flex gap-2 mt-4">
-          <Button size="sm" full onClick={() => { useGame.getState().act((L) => (L.settings.watchGames = true)); useGame.getState().simulate('game'); }} icon={<Icon name="eye" size={16} />}>Смотреть матч</Button>
+          <Button size="sm" full onClick={() => useGame.getState().simulate('game', undefined, { watch: true })} icon={<Icon name="eye" size={16} />}>Смотреть матч</Button>
           <Button size="sm" full onClick={() => nav.go('roster')} icon={<Icon name="roster" size={16} />}>Звенья</Button>
         </div>
       </div>

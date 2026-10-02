@@ -95,11 +95,11 @@ export function Meter({ value, max = 100, color, className, height = 6 }: { valu
   );
 }
 
-export function Stat({ label, value, sub, accent, className }: { label: string; value: ReactNode; sub?: ReactNode; accent?: boolean; className?: string }) {
+export function Stat({ label, value, sub, accent, good, className }: { label: string; value: ReactNode; sub?: ReactNode; accent?: boolean; good?: boolean; className?: string }) {
   return (
     <div className={cx('glass rounded-2xl px-3 py-2.5 min-w-0', className)}>
       <div className="text-[11px] uppercase tracking-wider text-muted truncate">{label}</div>
-      <div className={cx('num text-[22px] leading-tight mt-0.5 truncate', accent && 'accent-text')}>{value}</div>
+      <div className={cx('num text-[22px] leading-tight mt-0.5 truncate', accent && 'accent-text', good && 'text-good')}>{value}</div>
       {sub && <div className="text-[12px] text-muted truncate">{sub}</div>}
     </div>
   );

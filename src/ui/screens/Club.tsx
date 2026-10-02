@@ -37,7 +37,7 @@ export function FinanceScreen() {
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Потолок" value={money(capOf(L), 1)} />
         <Stat label="Занято" value={money(capHit(L, L.user), 1)} />
-        <Stat label="Свободно" value={money(capSpace(L, L.user), 1)} accent />
+        <Stat label="Свободно" value={money(capSpace(L, L.user), 1)} good={capSpace(L, L.user) >= 0} accent={capSpace(L, L.user) < 0} />
       </div>
       <Card className="mt-2 !py-3 text-[13px] text-muted">
         <Term k="cap">Потолок</Term> {seasonLabel(L.season)}: {money(capOf(L))}, следующий сезон: {money(capOf(L, L.season + 1))}. <Term k="floor">Нижняя граница</Term>: {money(L.meta.floor[L.season] ?? capOf(L) * 0.74)}. В АХЛ на потолок засчитывается только часть зарплаты выше {money(L.meta.minSalary[L.season] + 375_000)}.

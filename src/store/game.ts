@@ -38,7 +38,7 @@ interface GameState {
   start: (opts: NewCareerOpts) => Promise<void>;
   open: (id: string) => Promise<boolean>;
   setLeague: (L: League, id?: string) => void;
-  simulate: (mode: SimMode, target?: string) => Promise<void>;
+  simulate: (mode: SimMode, target?: string, opts?: { watch?: boolean }) => Promise<void>;
   stopSim: () => void;
   act: <T>(fn: (L: League) => T) => T;
   save: () => Promise<void>;
@@ -111,7 +111,7 @@ export const useGame = create<GameState>((set, get) => ({
     set({ L, saveId: id ?? `career-${Date.now()}`, ver: get().ver + 1 });
     get().save();
   },
-  simulate: async (mode, target) => {
+  simulate: async (mode, target, opts) => {
     const L = get().L;
     if (!L || get().sim?.running) return;
     if (L.gm.fired) {
@@ -155,7 +155,7 @@ export const useGame = create<GameState>((set, get) => ({
     checkAchievements(L);
     set({ sim: null, ver: get().ver + 1 });
     get().save();
-    onStop(reason, mode);
+    onStop(reason, mode, !!opts?.watch);
   },
   stopSim: () => {
     const s = get().sim;
@@ -190,7 +190,7 @@ export const useGame = create<GameState>((set, get) => ({
   },
 }));
 
-function onStop(reason: string | null, mode: SimMode) {
+function onStop(reason: string | null, mode: SimMode, watch = false) {
   const nav = useNav.getState();
   const L = useGame.getState().L!;
   if (L.gm.fired) return nav.go('more', 'career');
@@ -203,7 +203,7 @@ function onStop(reason: string | null, mode: SimMode) {
   if (reason === 'fa' || reason === 'fa-day1') return nav.go('market', 'market', { tab: 'fa' });
   if (reason === 'expiring') return nav.go('market', 'market', { tab: 'ext' });
   if (reason === 'playoffs') return nav.go('league', 'playoffs');
-  if (mode === 'game' && L.settings.watchGames && lastUserBox) nav.openModal('match', { live: true, id: lastUserBox.game.id });
+  if (mode === 'game' && (watch || L.settings.watchGames) && lastUserBox) nav.openModal('match', { live: true, id: lastUserBox.game.id });
 }
 
 /** Fills fields added in later versions. */

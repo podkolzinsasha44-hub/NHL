@@ -170,7 +170,7 @@ export function userFAOffer(L: League, p: Player, o: OfferTerms): { status: 'sig
   const askRatio = n.floor / mv;
   if (o.aav < n.floor * (others.length ? 1 : 0.96)) {
     n.patience -= 12;
-    return { status: 'rejected', message: `Агент: «Это ниже рынка. Мы ориентируемся на $${(n.ask.aav / 1e6).toFixed(2)}M × ${n.ask.years}».` };
+    return { status: 'rejected', message: `Это ниже рынка. Мы ориентируемся на $${(n.ask.aav / 1e6).toFixed(2)}M × ${n.ask.years}.` };
   }
   if (mine >= bestOther * 1.0 && mine >= askRatio * 0.97) {
     signFA(L, p, offer);
@@ -182,7 +182,7 @@ export function userFAOffer(L: League, p: Player, o: OfferTerms): { status: 'sig
     if (i >= 0) list[i] = offer;
     else list.push(offer);
   }
-  return { status: 'considering', message: 'Агент: «Есть предложения интереснее. Мы подумаем — решение в ближайшие дни».' };
+  return { status: 'considering', message: 'Есть предложения интереснее. Мы подумаем — решение в ближайшие дни.' };
 }
 
 /** After the July rush: unsigned players lower expectations; AI fills holes; leftovers go to Europe in October. */

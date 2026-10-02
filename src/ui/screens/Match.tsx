@@ -27,7 +27,7 @@ export function MatchScreen({ params }: { params: Record<string, unknown> }) {
 
   useEffect(() => {
     if (!live) return;
-    const id = setInterval(() => setT((x) => x + 80 * speed), 100);
+    const id = setInterval(() => setT((x) => x + 9 * speed), 100);
     return () => clearInterval(id);
   }, [live, speed]);
 
@@ -101,7 +101,7 @@ export function MatchScreen({ params }: { params: Record<string, unknown> }) {
       <div className="relative scroll flex-1 px-4 pt-3 pb-safe">
         {live && (
           <div className="flex gap-2 mb-3">
-            {[1, 3, 8].map((s) => <Button key={s} size="sm" full variant={speed === s ? 'primary' : 'glass'} onClick={() => setSpeed(s)}>×{s}</Button>)}
+            {[1, 4, 12].map((s) => <Button key={s} size="sm" full variant={speed === s ? 'primary' : 'glass'} onClick={() => setSpeed(s)}>×{s}</Button>)}
             <Button size="sm" full onClick={() => setT(endT + 1)}>К финалу</Button>
           </div>
         )}
