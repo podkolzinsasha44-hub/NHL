@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGame, useL } from '../../store/game';
 import { useNav } from '../../store/nav';
 import type { League, TradeAsset } from '../../engine/types';
@@ -57,6 +57,15 @@ export function TradeScreen({ params }: { params: Record<string, unknown> }) {
     setGive({ ...req, retain: {} });
     setResp({ accept: false, mood: 0, message: 'Вот что мы хотим взамен.' });
   };
+
+  // Opened from the trade advisor: ask the club's price straight away.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (params.ask && !asked.current && tradesOpen(L, userLg(L))) {
+      asked.current = true;
+      ask();
+    }
+  }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lg = userLg(L);
   if (!tradesOpen(L, lg)) {

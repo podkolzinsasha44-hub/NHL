@@ -51,9 +51,9 @@ export function SectionTitle({ children, right, className }: { children: ReactNo
 
 export function Segmented<T extends string>({ value, options, onChange, className }: { value: T; options: { v: T; label: ReactNode }[]; onChange: (v: T) => void; className?: string }) {
   return (
-    <div className={cx('glass rounded-2xl p-1 flex gap-1 relative', className)}>
+    <div className={cx('glass rounded-2xl p-1 flex relative', options.length >= 5 ? 'gap-0.5' : 'gap-1', className)}>
       {options.map((o) => (
-        <button key={o.v} onClick={() => onChange(o.v)} className="relative flex-1 h-9 rounded-xl text-[14px] font-medium press">
+        <button key={o.v} onClick={() => onChange(o.v)} className={cx('relative h-9 rounded-xl font-medium press', options.length >= 5 ? 'flex-auto px-1 text-[12.5px] tracking-[-0.01em]' : 'flex-1 text-[14px]')}>
           {value === o.v && (
             <motion.div layoutId={`seg-${options.map((x) => x.v).join('')}`} className="absolute inset-0 rounded-xl bg-white/12 border border-white/10" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
           )}
