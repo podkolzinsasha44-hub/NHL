@@ -397,6 +397,9 @@ export function signELC(L: League, p: Player, team: string) {
   const start = beforeNewLeagueYear(L) ? L.season + 1 : L.season;
   p.c = { aav: t.aav, last: start + t.years - 1, type: 'ELC', clause: null, exp: 'RFA', signed: L.season };
   p.team = team;
+  if (!p.teams.includes(team)) p.teams.push(team);
+  p.lg = 'NHL';
+  delete p.rights;
   // Junior-age players can be signed and returned to their junior club (the contract slides).
   const wasJunior = p.st === 'JR';
   p.st = p.ovr >= 72 ? 'NHL' : wasJunior && ageOn(p.bd, L.date) < 20 ? 'JR' : 'AHL';

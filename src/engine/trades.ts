@@ -520,6 +520,23 @@ export function acceptOffer(L: League, offerId: number) {
   return { ok: true };
 }
 
+/** Player career: the club honours a trade request if another club pays fair value. */
+export function tradePlayerAway(L: League, p: Player): string | null {
+  const from = p.team;
+  if (!from) return null;
+  const lg = teamLg(L, from) ?? 'NHL';
+  if (!tradesOpen(L, lg)) return null;
+  const give: TradeAsset = { players: [p.id], picks: [] };
+  for (const t of shuffle(leagueTeams(L, lg).filter((x) => x.id !== from && x.id !== L.user))) {
+    const price = askPriceFrom(L, from, t.id, give, lg === 'KHL' ? 74 : 80);
+    if (!price || !checkTrade(L, from, t.id, give, price).ok) continue;
+    if (packageValue(L, give, t.id) - packageValue(L, price, t.id) < -1) continue;
+    executeTrade(L, from, t.id, give, price);
+    return t.id;
+  }
+  return null;
+}
+
 /** Trade block: AI teams interested in a player and what they'd give (rough). */
 export function interestIn(L: League, p: Player) {
   return leagueTeams(L, teamLg(L, p.team) ?? 'NHL')

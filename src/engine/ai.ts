@@ -82,8 +82,13 @@ export function manageRoster(L: League, team: Team, org: Player[], isUser: boole
   const healthyNow = nhl.filter(available);
   if (!isUser && healthyNow.length > 23) {
     const extra = healthyNow.length - 23;
+    // Never send down the players who make the lineup (top 12 F, 6 D, 2 G), waiver-exempt or not.
+    const core = new Set<number>();
+    for (const [g, n] of [['F', 12], ['D', 6], ['G', 2]] as const) {
+      healthyNow.filter((p) => grp(p) === g).sort((a, b) => b.ovr - a.ovr).slice(0, n).forEach((p) => core.add(p.id));
+    }
     const cands = healthyNow
-      .filter((p) => !needsWaivers(L, p))
+      .filter((p) => !needsWaivers(L, p) && !core.has(p.id))
       .sort((a, b) => a.ovr - b.ovr);
     const counts = { F: 0, D: 0, G: 0 };
     for (const p of healthyNow) counts[grp(p)]++;
@@ -98,7 +103,7 @@ export function manageRoster(L: League, team: Team, org: Player[], isUser: boole
     }
     // If still too many, waive the lowest-rated veteran (AI teams rarely claim).
     if (sent < extra) {
-      const vets = healthyNow.filter((p) => p.st === 'NHL').sort((a, b) => a.ovr - b.ovr);
+      const vets = healthyNow.filter((p) => p.st === 'NHL' && !core.has(p.id)).sort((a, b) => a.ovr - b.ovr);
       for (const p of vets) {
         if (sent >= extra) break;
         const g = grp(p);
@@ -138,7 +143,8 @@ export function aiPromote(L: League, org: Player[]) {
     const isG = (p: Player) => (g === 'D' ? p.pos === 'D' : p.pos !== 'D' && p.pos !== 'G');
     const worst = nhl.filter(isG).sort((a, b) => a.ovr - b.ovr)[0];
     const best = ahl.filter(isG).sort((a, b) => b.ovr - a.ovr)[0];
-    if (worst && best && best.ovr >= worst.ovr + 3 && !needsWaivers(L, worst)) {
+    // A clearly better farm player takes the spot; a veteran is exposed to waivers only for a big upgrade.
+    if (worst && best && best.ovr >= worst.ovr + 3 && (!needsWaivers(L, worst) || best.ovr >= worst.ovr + 6)) {
       worst.st = 'AHL';
       best.st = 'NHL';
     }

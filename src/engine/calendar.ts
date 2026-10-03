@@ -5,13 +5,15 @@ import { statKey } from './stats';
 import type { GoalieLine, League, SkaterLine } from './types';
 import { clamp } from './util';
 import { next } from './rng';
+import { isOlympicYear } from './intl';
 
 export function calendarEvents(L: League) {
   const md = L.date.slice(5);
   if (L.phase !== 'regular') return;
   if (md.endsWith('-01') && L.date > L.seasonStart) playerOfMonth(L);
   if (md === '01-06' && !L.flags[`wjc${L.season}`]) worldJuniors(L);
-  if (md === '01-31' && !L.flags[`asg${L.season}`]) allStar(L);
+  // No All-Star Game in Olympic seasons (the league pauses for the Olympics instead).
+  if (md === '01-31' && !L.flags[`asg${L.season}`] && !isOlympicYear(L.season + 1)) allStar(L);
 }
 
 function playerOfMonth(L: League) {

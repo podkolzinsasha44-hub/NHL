@@ -15,6 +15,8 @@ import { pressConference } from './press';
 import { calendarEvents } from './calendar';
 import { gameLg, isNhlGM, LEAGUE_STYLE, userTeam } from './leagues';
 import { khlAfterGames, khlGamesToday, khlPhaseTick, onKhlPlayoffGame } from './khl';
+import { intlDaily } from './intl';
+import { proDaily } from './pro';
 
 export interface DayReport {
   date: string;
@@ -266,6 +268,8 @@ export function advanceDay(L: League): DayReport {
     }
   }
   khlAfterGames(L);
+  intlDaily(L);
+  proDaily(L);
 
   tickInjuries(L);
   calendarEvents(L);

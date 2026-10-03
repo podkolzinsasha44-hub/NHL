@@ -7,6 +7,8 @@ import { countSigning, freeAgents, signFA, signingBlock } from './fa';
 import { foreignCounts } from './khlData';
 import { isGM, isNhlGM, leagueTeamIds, lgOf, userTeam } from './leagues';
 import { buildKhlSeason, khlYouthIntake } from './khl';
+import { applyOlympicBreak } from './intl';
+import { proNewLeagueYear } from './pro';
 import { finalizeDraftOrder, runDraftUntilUser, runLottery } from './draft';
 import { faDay, faWeekly, openFreeAgency, sendUnsignedAbroad } from './fa';
 import { pushMsg, pushNews, social } from './news';
@@ -37,7 +39,8 @@ export function offseasonDaily(L: League) {
   }
   if (L.phase === 'regular' && md(L) >= '01-01' && md(L) < '06-01' && new Date(L.date + 'T12:00:00Z').getUTCDay() === 3) aiExtensions(L, 0.06);
 
-  if (L.phase === 'offseason' && md(L) === '06-26' && L.draft && !L.draft.done) {
+  // Draft on June 26 (or right after a late Cup final, e.g. in Olympic seasons).
+  if (L.phase === 'offseason' && md(L) >= '06-26' && md(L) < '07-01' && L.draft && !L.draft.done) {
     L.phase = 'draft';
     if (!L.draft.order.length) finalizeDraftOrder(L);
     runDraftUntilUser(L);
@@ -51,7 +54,7 @@ export function offseasonDaily(L: League) {
     aiSignDraftees(L);
     return;
   }
-  if (L.phase === 'offseason' && md(L) === '06-30' && !L.flags[`qo${s}`]) {
+  if (L.phase === 'offseason' && md(L) >= '06-30' && md(L) < '07-10' && L.draft?.done !== false && !L.flags[`qo${s}`]) {
     L.flags[`qo${s}`] = true;
     aiExtensions(L, 1);
     expireRights(L);
@@ -61,7 +64,7 @@ export function offseasonDaily(L: League) {
     return;
   }
   // July 1 — new league year
-  if (L.phase === 'offseason' && md(L) >= '07-01' && md(L) < '07-10' && !L.flags[`ly${s + 1}`]) {
+  if (L.phase === 'offseason' && md(L) >= '07-01' && md(L) < '07-10' && L.flags[`qo${s}`] && !L.flags[`ly${s + 1}`]) {
     L.flags[`ly${s + 1}`] = true;
     newLeagueYear(L);
     return;
@@ -269,6 +272,7 @@ function newLeagueYear(L: League) {
   const old = L.season;
   L.season = old + 1;
   activateExtensions(L);
+  proNewLeagueYear(L);
   // Expiring contracts
   for (const id in L.players) {
     const p = L.players[id];
@@ -296,6 +300,7 @@ function newLeagueYear(L: League) {
   while (new Date(start + 'T12:00:00Z').getUTCDay() !== 2) start = addDays(start, 1);
   buildSeasonGames(L, start, L.season % 2 === 1);
   buildKhlSeason(L);
+  applyOlympicBreak(L);
   L.deadline = (() => {
     const yy = L.season + 1;
     for (let d = 1; d <= 7; d++) {
@@ -350,7 +355,7 @@ export function aiCapCompliance(L: League, floor = true) {
     // Still over: buy out the worst value contract
     if (floor && capSpace(L, t.id) < 0) {
       const worst = Object.values(L.players)
-        .filter((p) => p.team === t.id && p.c && p.c.clause !== 'NMC' && p.c.type !== 'ELC')
+        .filter((p) => p.team === t.id && p.c && p.c.clause !== 'NMC' && p.c.type !== 'ELC' && p.id !== L.pro?.pid)
         .sort((a, b) => (b.c!.aav - valueFor(L, b, t.id)) - (a.c!.aav - valueFor(L, a, t.id)))[0];
       if (worst) buyout(L, worst);
     }

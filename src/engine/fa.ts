@@ -276,6 +276,7 @@ export function faWeekly(L: League) {
 export function sendUnsignedAbroad(L: League) {
   let n = 0;
   for (const p of freeAgents(L)) {
+    if (p.id === L.pro?.pid) continue;
     if (ageOn(p.bd, L.date) >= 34 && p.ovr < 76) { p.st = 'RET'; p.retired = L.season; continue; }
     if (p.ovr < 68 && next() < 0.6) { p.st = 'EUR'; p.lg = RU_HOME.has(p.ctry) ? 'VHL' : next() < 0.5 ? 'SHL' : 'DEL'; n++; }
   }

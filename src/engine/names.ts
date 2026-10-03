@@ -32,7 +32,26 @@ const BLR_LAST = ['Kavalenka', 'Novik', 'Shablovski', 'Sharangovich', 'Lisouski'
 const KAZ_FIRST = ['Nikita', 'Dmitri', 'Arkadi', 'Sayan', 'Alikhan', 'Yerlan', 'Danil', 'Kirill'];
 const KAZ_LAST = ['Akhmetov', 'Nurlanov', 'Rakhimov', 'Bekov', 'Abenov', 'Mukhamedov', 'Seitov', 'Omarov'];
 
-export type Country = 'CAN' | 'USA' | 'SWE' | 'FIN' | 'RUS' | 'CZE' | 'SVK' | 'SUI' | 'DEU' | 'LVA' | 'DNK' | 'NOR' | 'AUT' | 'BLR' | 'KAZ';
+// Smaller hockey nations (national-team pools: IIHF top division and Division I).
+const SVN_FIRST = ['Jan', 'Luka', 'Žan', 'Nejc', 'Miha', 'Matic', 'Rok', 'Blaž', 'Gašper', 'Anže', 'Tilen', 'Jaka', 'Aljaž', 'Ožbej'];
+const SVN_LAST = ['Novak', 'Horvat', 'Kovačič', 'Krajnc', 'Zupančič', 'Potočnik', 'Kos', 'Vidmar', 'Golob', 'Mlakar', 'Kolar', 'Žagar', 'Turk', 'Bizjak', 'Hribar', 'Kralj'];
+const UKR_FIRST = ['Andrii', 'Oleksandr', 'Dmytro', 'Maksym', 'Bohdan', 'Vladyslav', 'Yevhen', 'Taras', 'Oleh', 'Serhii', 'Yurii', 'Denys', 'Artem', 'Illia'];
+const UKR_LAST = ['Shevchenko', 'Bondarenko', 'Kovalenko', 'Tkachenko', 'Kravchenko', 'Oliinyk', 'Melnyk', 'Lysenko', 'Marchenko', 'Rudenko', 'Savchenko', 'Petrenko', 'Moroz', 'Zakharchenko'];
+const HUN_FIRST = ['Bence', 'Máté', 'Dávid', 'Balázs', 'Ádám', 'Levente', 'Gergő', 'Zsombor', 'István', 'Csanád', 'Vilmos', 'Kristóf', 'Tamás', 'Bálint'];
+const HUN_LAST = ['Nagy', 'Kovács', 'Szabó', 'Horváth', 'Tóth', 'Varga', 'Kiss', 'Molnár', 'Németh', 'Farkas', 'Balogh', 'Papp', 'Lakatos', 'Takács', 'Juhász', 'Mészáros'];
+const ITA_FIRST = ['Luca', 'Marco', 'Alex', 'Daniel', 'Simon', 'Matteo', 'Andrea', 'Thomas', 'Lukas', 'Peter', 'Davide', 'Hannes', 'Fabian', 'Diego'];
+const ITA_LAST = ['Rossi', 'Bernard', 'Frank', 'Gruber', 'Pichler', 'Kofler', 'Ferrari', 'Bianchi', 'Romano', 'Mair', 'Egger', 'Colombo', 'Moroder', 'Insam', 'Gasser', 'Ricci'];
+const GBR_FIRST = ['Liam', 'Ben', 'Callum', 'Robert', 'Jordan', 'Sam', 'Ollie', 'Lewis', 'Jack', 'Harry', 'Cole', 'Josh', 'Ryan', 'Tom'];
+const GBR_LAST = ['Smith', 'Jones', 'Taylor', 'Brown', 'Davies', 'Evans', 'Wilson', 'Thomas', 'Johnson', 'Roberts', 'Walker', 'Wright', 'Robinson', 'Hughes', 'Lachlan', 'Farmer'];
+const FRA_FIRST = ['Hugo', 'Louis', 'Théo', 'Nathan', 'Enzo', 'Maxime', 'Alexandre', 'Antoine', 'Pierre', 'Clément', 'Valentin', 'Damien', 'Kevin', 'Floran'];
+const FRA_LAST = ['Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand', 'Leroy', 'Moreau', 'Simon', 'Laurent', 'Lefebvre', 'Michel', 'Garcia', 'Roussel'];
+const POL_FIRST = ['Jakub', 'Kacper', 'Szymon', 'Mateusz', 'Filip', 'Bartosz', 'Dominik', 'Patryk', 'Krystian', 'Paweł', 'Marcin', 'Aron', 'Grzegorz', 'Kamil'];
+const POL_LAST = ['Nowak', 'Kowalski', 'Wiśniewski', 'Wójcik', 'Kowalczyk', 'Kamiński', 'Lewandowski', 'Zieliński', 'Szymański', 'Woźniak', 'Dąbrowski', 'Kozłowski', 'Jankowski', 'Mazur'];
+const JPN_FIRST = ['Yuto', 'Haruto', 'Sota', 'Ren', 'Kaito', 'Yuki', 'Daiki', 'Shota', 'Ryota', 'Takumi', 'Kenta', 'Hiroki', 'Makoto', 'Yushiroh'];
+const JPN_LAST = ['Sato', 'Suzuki', 'Takahashi', 'Tanaka', 'Watanabe', 'Ito', 'Yamamoto', 'Nakamura', 'Kobayashi', 'Saito', 'Kato', 'Yoshida', 'Hirano', 'Furuhashi'];
+
+export type Country = 'CAN' | 'USA' | 'SWE' | 'FIN' | 'RUS' | 'CZE' | 'SVK' | 'SUI' | 'DEU' | 'LVA' | 'DNK' | 'NOR' | 'AUT' | 'BLR' | 'KAZ'
+  | 'SVN' | 'UKR' | 'HUN' | 'ITA' | 'GBR' | 'FRA' | 'POL' | 'JPN';
 
 const POOLS: Record<Country, [string[], string[]]> = {
   CAN: [NA_FIRST, CAN_LAST],
@@ -50,6 +69,14 @@ const POOLS: Record<Country, [string[], string[]]> = {
   AUT: [AUT_FIRST, AUT_LAST],
   BLR: [BLR_FIRST, BLR_LAST],
   KAZ: [KAZ_FIRST, KAZ_LAST],
+  SVN: [SVN_FIRST, SVN_LAST],
+  UKR: [UKR_FIRST, UKR_LAST],
+  HUN: [HUN_FIRST, HUN_LAST],
+  ITA: [ITA_FIRST, ITA_LAST],
+  GBR: [GBR_FIRST, GBR_LAST],
+  FRA: [FRA_FIRST, FRA_LAST],
+  POL: [POL_FIRST, POL_LAST],
+  JPN: [JPN_FIRST, JPN_LAST],
 };
 
 export function randomName(country: Country, r: () => number): [string, string] {

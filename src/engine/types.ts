@@ -440,6 +440,11 @@ export interface ProState {
   log: { season: number; team: string; lg: string; gp: number; g: number; a: number; pts: number; ovr: number; note?: string }[];
   /** Last date the player asked the coach / GM for something (cool-down). */
   asked?: string;
+  /** Weeks in a row as a healthy scratch; games played at the last weekly check. */
+  scratch?: number;
+  gpMark?: number;
+  /** Deal agreed in spring with a new club; takes effect on July 1. */
+  pending?: { team: string; aav: number; years: number; kind: 'ELC' | 'STD' };
   retired?: boolean;
 }
 export interface ProOffer {
@@ -476,8 +481,12 @@ export interface Tournament {
   name: string;
   host: string;
   start: string;
+  /** Last scheduled day (medal games). */
+  end: string;
   /** Rosters are named on this date. */
   select: string;
+  /** Rosters have been named. */
+  named?: boolean;
   teams: string[];
   groups: Record<string, string[]>;
   rosters: Record<string, number[]>;
@@ -495,7 +504,13 @@ export interface IntlState {
   /** Top-division field for the next World Championship. */
   field: string[];
   current: Tournament | null;
-  history: { id: string; kind: IntlKind; year: number; name: string; medals: string[]; mvp?: number; topScorer?: { id: number; name: string; pts: number } }[];
+  /** Last finished tournament, kept in full for the results screen. */
+  prev?: Tournament;
+  history: { id: string; kind: IntlKind; year: number; name: string; medals: string[]; mvp?: number; topScorer?: { id: number; name: string; pts: number }; coach?: string; coachRank?: number }[];
+  /** World ranking (best first), updated after every tournament. */
+  ranking: string[];
+  /** Recent final placements per nation (most recent first). */
+  recent: Record<string, number[]>;
   nextGameId: number;
 }
 

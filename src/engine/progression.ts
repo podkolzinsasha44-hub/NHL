@@ -96,7 +96,7 @@ export function trainingCamp(L: League) {
     const coachDev = coach ? (coach.style === 'development' ? 0.5 : 0) + (coach.rating - 72) * 0.01 : 0;
     const d = developPlayer(L, p, coachDev);
     if (p.team === L.user) report.push({ p, d });
-    p.focus = null;
+    if (p.id !== L.pro?.pid) p.focus = null; // the user's own player keeps his training plan
     p.form = 0;
   }
   report.sort((a, b) => b.d - a.d);
@@ -115,7 +115,7 @@ export function retirements(L: League) {
   const notable: Player[] = [];
   for (const id in L.players) {
     const p = L.players[id];
-    if (p.st === 'RET') continue;
+    if (p.st === 'RET' || p.id === L.pro?.pid) continue; // the user decides when to retire
     const a = ageOn(p.bd, L.date);
     let pr = 0;
     if (a >= 41) pr = 0.95;

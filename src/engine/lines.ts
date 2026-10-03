@@ -37,6 +37,11 @@ const defVal = (p: Player) => {
 /** Builds standard lines from the healthy NHL roster. Mutates team.lines. */
 export function autoLines(L: League, team: Team, nhl?: Player[]) {
   const roster = (nhl ?? nhlRoster(L, team.id)).filter((p) => p.st === 'NHL' && p.team === team.id && available(p));
+  buildLines(team, roster);
+}
+
+/** Builds lines from an explicit list of healthy players (also used by national teams). */
+export function buildLines(team: Team, roster: Player[]) {
   const fwd = roster.filter((p) => p.pos !== 'D' && p.pos !== 'G').sort((a, b) => b.ovr - a.ovr);
   const def = roster.filter((p) => p.pos === 'D').sort((a, b) => b.ovr - a.ovr);
   const gls = roster.filter((p) => p.pos === 'G').sort((a, b) => b.ovr - a.ovr);
