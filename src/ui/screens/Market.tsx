@@ -8,7 +8,8 @@ import { Screen } from '../components/shell';
 import { Button, Card, Chips, cx, Empty, Pill, Segmented, SectionTitle } from '../components/kit';
 import { PlayerRow } from '../components/rows';
 import { TeamLogo } from '../components/media';
-import { capSpace, extensionOf, marketValue } from '../../engine/contracts';
+import { capSpace, extensionOf, valueFor } from '../../engine/contracts';
+import { leagueTeams, userLg } from '../../engine/leagues';
 import { freeAgents } from '../../engine/fa';
 import { pickLabel, tradesOpen } from '../../engine/trades';
 import { dateShort, money, POS_RU, seasonLabel } from '../format';
@@ -40,15 +41,16 @@ export function Market({ params }: { params: Record<string, unknown> }) {
 
 function TradeHub({ L }: { L: League }) {
   const nav = useNav();
-  const open = tradesOpen(L);
-  const teams = Object.values(L.teams).filter((t) => t.id !== L.user).sort((a, b) => a.name.localeCompare(b.name));
+  const lg = userLg(L);
+  const open = tradesOpen(L, lg);
+  const teams = leagueTeams(L, lg).filter((t) => t.id !== L.user).sort((a, b) => a.name.localeCompare(b.name));
   const stratRu = { contend: 'претендент', bubble: 'середняк', rebuild: 'перестройка' } as const;
   return (
     <div>
       {!open && (
         <Card className="border-warn/30 mb-3">
           <div className="font-semibold">Окно обменов закрыто</div>
-          <div className="text-[13.5px] text-muted mt-1">{L.phase === 'playoffs' ? 'Во время плей-офф обмены запрещены.' : <>После <Term k="deadline">дедлайна</Term> обмены откроются только после плей-офф.</>}</div>
+          <div className="text-[13.5px] text-muted mt-1">{(lg === 'KHL' ? L.khl?.phase === 'playoffs' : L.phase === 'playoffs') ? 'Во время плей-офф обмены запрещены.' : <>После <Term k="deadline">дедлайна</Term>{lg === 'KHL' ? ' (25 января)' : ''} обмены откроются только после плей-офф.</>}</div>
         </Card>
       )}
       {L.offers.length > 0 && (
@@ -71,7 +73,7 @@ function TradeHub({ L }: { L: League }) {
         </>
       )}
       <Button variant="primary" size="lg" full className="mt-3" disabled={!open} onClick={() => nav.push('trade', {})}>Новый обмен</Button>
-      <SectionTitle>Клубы лиги</SectionTitle>
+      <SectionTitle>Клубы {lg === 'KHL' ? 'КХЛ' : 'лиги'}</SectionTitle>
       <div className="glass rounded-3xl py-1">
         {teams.map((t) => (
           <div key={t.id} onClick={() => nav.push('team', { id: t.id })} className="press flex items-center gap-3 px-3 min-h-[56px] active:bg-white/5 rounded-2xl">
@@ -103,7 +105,7 @@ function FreeAgents({ L }: { L: League }) {
     <div>
       <Card className="mb-3 !py-3">
         <div className="text-[13.5px] text-muted">
-          {L.phase === 'freeagency' ? <>Идёт главная волна рынка (день {L.fa?.day}). Клубы делают предложения, игроки выбирают лучшее: деньги, срок, шанс на Кубок, роль, налоги.</> : <>Неподписанные игроки. Летом с 1 июля здесь появятся главные <Term k="ufa">UFA</Term> лиги.</>}
+          {L.phase === 'freeagency' ? <>Идёт главная волна рынка (день {L.fa?.day}). Клубы НХЛ и КХЛ делают предложения, игроки выбирают лучшее: деньги после налогов, срок, лигу, шанс на титул, роль.</> : <>Неподписанные игроки. Летом с 1 июля здесь появятся главные <Term k="ufa">UFA</Term> — игроки НХЛ и КХЛ.</>}{userLg(L) === 'KHL' ? ' Сумма — ожидания игрока в КХЛ; иностранцев в клубе может быть не больше пяти.' : ''}
         </div>
       </Card>
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по имени" className="glass rounded-2xl w-full h-11 px-4 outline-none text-ink placeholder:text-faint mb-2" />
@@ -121,7 +123,7 @@ function FreeAgents({ L }: { L: League }) {
                   p={p}
                   L={L}
                   onClick={() => nav.push('negotiate', { id: p.id, kind: 'fa' })}
-                  sub={`${POS_RU[p.pos]} · ${ageOn(p.bd, L.date)} лет · ~${money(marketValue(L, p))}${offers ? ` · ${offers} предл.` : ''}${p.lg && !p.real ? ` · ${p.lg}` : ''}`}
+                  sub={`${POS_RU[p.pos]} · ${ageOn(p.bd, L.date)} лет · ~${money(valueFor(L, p, L.user))}${offers ? ` · ${offers} предл.` : ''}${p.lg && !p.real ? ` · ${p.lg}` : ''}${p.rights && p.rights !== L.user ? ` · права ${p.rights}` : ''}`}
                 />
               </div>
             );
@@ -148,7 +150,7 @@ function Extensions({ L }: { L: League }) {
         <div className="glass rounded-3xl py-1">
           {pending.map((p) => (
             <PlayerRow key={p.id} p={p} L={L} onClick={() => nav.push('negotiate', { id: p.id, kind: p.c!.exp === 'RFA' ? 'rfa' : 'extend' })}
-              sub={`${POS_RU[p.pos]} · ${ageOn(p.bd, L.date)} лет · сейчас ${money(p.c!.aav)} · ${p.c!.exp} · хочет ~${money(marketValue(L, p, L.season + 1))}`} />
+              sub={`${POS_RU[p.pos]} · ${ageOn(p.bd, L.date)} лет · сейчас ${money(p.c!.aav)} · ${p.c!.exp} · хочет ~${money(valueFor(L, p, L.user, L.season + 1))}`} />
           ))}
         </div>
       )}

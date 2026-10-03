@@ -58,11 +58,13 @@ export const KHL_CHAMPION_2026 = 'LOK';
 /** 2026-27 calendar: regular season Sep 5 – Mar 20, playoffs Mar 23 – May 23, trade deadline Jan 25. */
 export const KHL_GAMES = 68;
 
-/** A player counts against the KHL foreign-player limit of his club. */
+/** EAEU players (here: Russia, Belarus, Kazakhstan) are not imports in the KHL. */
+const NOT_FOREIGN = new Set(['RUS', 'BLR', 'KAZ']);
+
+/** A player counts against the 5-import limit. Only Russian clubs have the limit:
+ *  Dinamo Minsk, Barys and the Shanghai Dragons may sign any number of imports. */
 export function isForeignFor(p: Player, team: string) {
-  const c = KHL_BY_ID[team];
-  if (!c || !c.home) return false;
-  return p.ctry !== c.home;
+  return KHL_BY_ID[team]?.home === 'RUS' && !NOT_FOREIGN.has(p.ctry);
 }
 
 /** Foreign players under contract per KHL club, in one pass over the world. */

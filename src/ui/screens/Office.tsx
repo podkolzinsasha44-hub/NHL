@@ -10,9 +10,10 @@ import { daysBetween } from '../../engine/util';
 import { SimDock } from './SimOverlay';
 import { dateLong, dateShort, dow, money, phaseLabel, recordStr, seasonLabel } from '../format';
 import { nextUserGame } from '../../engine/season';
-import { placeInDivision } from '../../engine/standings';
+import { placeInConference, placeInDivision } from '../../engine/standings';
 import { DIV_NAMES } from '../../engine/standings';
-import { gameWinProb, seasonOdds } from '../../engine/projection';
+import { gameWinProb, oddsFor } from '../../engine/projection';
+import { CUP_RU, userLg, userPhase } from '../../engine/leagues';
 import { capSummary } from '../../engine/contracts';
 import { unreadCount } from '../../engine/news';
 import { assistantTips } from '../assistant';
@@ -26,7 +27,9 @@ export function Office() {
   const nav = useNav();
   const t = L.teams[L.user];
   const ng = nextUserGame(L);
-  const odds = useMemo(() => (L.phase === 'regular' || L.phase === 'preseason' || L.phase === 'playoffs' ? seasonOdds(L, 250) : null), [L.date, L.phase, L.trades.length, L.user]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ph = userPhase(L);
+  const khl = userLg(L) === 'KHL';
+  const odds = useMemo(() => (ph === 'regular' || ph === 'preseason' || ph === 'playoffs' ? oddsFor(L, L.user, 250) : null), [L.date, ph, L.trades.length, L.user]); // eslint-disable-line react-hooks/exhaustive-deps
   const cap = capSummary(L, L.user);
   const tips = assistantTips(L).slice(0, 3);
   const unread = L.inbox.filter((m) => !m.read).slice(0, 3);
@@ -34,7 +37,7 @@ export function Office() {
   const lastGame = L.lastUserGame ? L.games.find((g) => g.id === L.lastUserGame && g.played) : null;
   const my = odds?.[L.user];
   useEffect(() => {
-    if (!my || L.phase !== 'regular') return;
+    if (!my || ph !== 'regular') return;
     const h = L.oddsHist ?? [];
     const last = h[h.length - 1];
     if (!last || daysBetween(last[0], L.date) >= 7) {
@@ -62,14 +65,14 @@ export function Office() {
           <div className="text-[12px] uppercase tracking-[0.16em] text-muted">{phaseLabel(L)} · {seasonLabel(L.season)}</div>
           <div className="font-display uppercase text-[26px] leading-none mt-1 truncate">{t.short}</div>
           <div className="text-[14px] text-muted mt-1.5">
-            <span className="num text-ink text-[16px]">{recordStr(t)}</span> · {t.rec.pts} оч. · {placeInDivision(L, t.id)}-е место, {DIV_NAMES[t.div]}
+            <span className="num text-ink text-[16px]">{recordStr(t)}</span> · {t.rec.pts} оч. · {khl ? `${placeInConference(L, t.id)}-е место на ${t.conf === 'W' ? 'Западе' : 'Востоке'}` : `${placeInDivision(L, t.id)}-е место, ${DIV_NAMES[t.div]}`}
           </div>
           <div className="text-[12.5px] text-faint mt-0.5">{dow(L.date)}, {dateLong(L.date)}</div>
         </div>
       </motion.div>
 
       {/* Next game */}
-      {ng && (L.phase === 'regular' || L.phase === 'playoffs' || L.phase === 'preseason') ? (
+      {ng && (ph === 'regular' || ph === 'playoffs' || ph === 'preseason') ? (
         <NextGameCard />
       ) : (
         <PhaseCard />
@@ -83,12 +86,12 @@ export function Office() {
             <Ring value={my.cup} label="кубок" size={70} color="#e8c26a" />
             <div className="flex-1 min-w-0">
               <div className="text-[11px] uppercase tracking-wider text-muted">Прогноз сезона</div>
-              {L.phase !== 'playoffs' ? (
+              {ph !== 'playoffs' ? (
                 <div className="num text-[24px] leading-tight">~{Math.round(my.pts)} <span className="text-[14px] text-muted font-sans">очков</span></div>
               ) : (
                 <div className="num text-[20px] leading-tight">Финал: {Math.round(my.final * 100)}%</div>
               )}
-              <div className="text-[12px] text-muted mt-0.5">Монте-Карло, 250 симуляций. Те же шансы, что использует движок.</div>
+              <div className="text-[12px] text-muted mt-0.5">Монте-Карло, 250 симуляций{khl ? ` · ${CUP_RU.KHL}` : ''}. Те же шансы, что использует движок.</div>
             </div>
           </div>
           {(L.oddsHist?.length ?? 0) >= 3 && (
@@ -194,15 +197,15 @@ function NextGameCard() {
   const g = nextUserGame(L)!;
   const home = g.h === L.user;
   const opp = L.teams[home ? g.a : g.h];
-  const p = gameWinProb(L, g.h, g.a);
+  const p = gameWinProb(L, g.h, g.a, !!g.series);
   const pUser = home ? p : 1 - p;
   const rival = L.rivals.some(([a, b]) => (a === g.h && b === g.a) || (a === g.a && b === g.h));
-  const series = g.series ? L.playoffs?.series.find((s) => s.id === g.series) : null;
+  const series = g.series ? (g.lg === 'KHL' ? L.khl?.playoffs : L.playoffs)?.series.find((s) => s.id === g.series) : null;
   return (
     <div className="relative rounded-[28px] overflow-hidden p-[1px]" style={{ background: 'linear-gradient(135deg, var(--accent), rgba(255,255,255,0.08) 40%, rgba(255,255,255,0.03))' }}>
       <div className="relative rounded-[27px] p-4 overflow-hidden" style={{ background: `linear-gradient(120deg, color-mix(in oklab, var(--team) 55%, #070b14), #070b14 55%, color-mix(in oklab, ${opp.primary} 40%, #070b14))` }}>
         <div className="flex items-center justify-between text-[11.5px] uppercase tracking-[0.14em] text-white/70">
-          <span>{series ? `Плей-офф · матч ${series.wHi + series.wLo + 1}` : g.special === 'classic' ? '❄️ Winter Classic' : 'Следующий матч'}</span>
+          <span>{series ? `${g.lg === 'KHL' ? 'Кубок Гагарина' : 'Плей-офф'} · матч ${series.wHi + series.wLo + 1}` : g.special === 'classic' ? '❄️ Winter Classic' : 'Следующий матч'}</span>
           <span>{dow(g.day)}, {dateShort(g.day)}</span>
         </div>
         <div className="flex items-center justify-between mt-3">
@@ -236,9 +239,13 @@ function NextGameCard() {
 function PhaseCard() {
   const L = useL();
   const nav = useNav();
-  const ph = L.phase;
+  const khl = userLg(L) === 'KHL';
+  // KHL clubs skip the NHL draft; their summer market is the same July 1 free agency.
+  const ph = khl ? (L.phase === 'freeagency' ? 'freeagency' : userPhase(L) === 'preseason' ? 'preseason' : userPhase(L) === 'offseason' ? 'offseason' : userPhase(L)) : L.phase;
   let title = '', text = '', cta: { label: string; go: () => void } | null = null, icon = '🏒';
-  if (ph === 'draft' || (ph === 'offseason' && L.date.slice(5) < '06-26' && L.draft && !L.draft.done)) {
+  if (khl && ph === 'preseason') {
+    icon = '🏁'; title = 'Предсезонка КХЛ'; text = `Регулярный чемпионат стартует ${dateLong(L.khl!.seasonStart)}.`;
+  } else if (!khl && (ph === 'draft' || (ph === 'offseason' && L.date.slice(5) < '06-26' && L.draft && !L.draft.done))) {
     icon = '🎯'; title = ph === 'draft' ? 'Драфт идёт!' : 'Скоро драфт'; text = ph === 'draft' ? 'Ваша очередь выбирать — откройте драфт-рум.' : `Драфт ${L.draft?.year} состоится 26 июня. Соберите свой big board.`;
     cta = { label: ph === 'draft' ? 'В драфт-рум' : 'Драфт-центр', go: () => nav.go('more', ph === 'draft' ? 'draftRoom' : 'draft') };
   } else if (ph === 'freeagency') {

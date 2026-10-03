@@ -6,6 +6,7 @@ import { Icon, Sheet } from '../components/shell';
 import { Button, cx, Spinner } from '../components/kit';
 import { TeamLogo } from '../components/media';
 import { nextUserGame } from '../../engine/season';
+import { userDeadline, userPhase, userTeam } from '../../engine/leagues';
 
 export function SimOverlay() {
   const sim = useGame((s) => s.sim);
@@ -60,7 +61,9 @@ export function SimDock() {
   const simulate = useGame((s) => s.simulate);
   const [open, setOpen] = useState(false);
   const ng = nextUserGame(L);
-  const label = L.phase === 'draft' ? 'Завершить драфт' : L.phase === 'freeagency' ? 'Следующий день рынка' : 'Продолжить';
+  const ph = userPhase(L);
+  const ut = userTeam(L);
+  const label = L.phase === 'draft' && L.mode !== 'player' && !L.teams[L.user]?.lg ? 'Завершить драфт' : L.phase === 'freeagency' ? 'Следующий день рынка' : 'Продолжить';
   if (sim) return null;
   return (
     <>
@@ -73,8 +76,8 @@ export function SimDock() {
             <Icon name="play" size={20} />
             <div className="text-left leading-tight">
               <div className="font-display uppercase tracking-wider text-[17px]">{label}</div>
-              {ng && (L.phase === 'regular' || L.phase === 'playoffs') && (
-                <div className="text-[11.5px] text-white/80 -mt-0.5">след. матч: {dateShort(ng.day)} · {ng.h === L.user ? 'дома' : 'в гостях'} с {ng.h === L.user ? ng.a : ng.h}</div>
+              {ng && (ph === 'regular' || ph === 'playoffs') && (
+                <div className="text-[11.5px] text-white/80 -mt-0.5">след. матч: {dateShort(ng.day)} · {ng.h === ut ? 'дома' : 'в гостях'} с {L.teams[ng.h === ut ? ng.a : ng.h]?.short ?? ''}</div>
               )}
             </div>
           </button>
@@ -85,7 +88,7 @@ export function SimDock() {
       </div>
       <Sheet open={open} onClose={() => setOpen(false)} title="Симуляция">
         <div className="flex flex-col gap-2">
-          {OPTIONS.filter((o) => !o.show || o.show(L.phase, L.date > L.deadline)).map((o) => (
+          {OPTIONS.filter((o) => !o.show || o.show(ph, L.date > userDeadline(L))).map((o) => (
             <button
               key={o.mode}
               onClick={() => { setOpen(false); simulate(o.mode); }}
@@ -101,7 +104,7 @@ export function SimDock() {
         </div>
         {ng && (
           <div className={cx('mt-4 glass rounded-2xl p-3 flex items-center gap-3')}>
-            <TeamLogo id={ng.h === L.user ? ng.a : ng.h} size={34} />
+            <TeamLogo id={ng.h === ut ? ng.a : ng.h} size={34} />
             <div className="text-[13.5px] text-muted">
               Следующий матч: <span className="text-ink">{dateLong(ng.day)}</span>
             </div>

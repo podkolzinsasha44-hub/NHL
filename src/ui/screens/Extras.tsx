@@ -6,9 +6,12 @@ import type { Player } from '../../engine/types';
 import { Screen, Icon } from '../components/shell';
 import { Button, Card, Chips, cx, Empty, Meter, Pill, SectionTitle, Segmented } from '../components/kit';
 import { PlayerRow } from '../components/rows';
-import { PlayerPhoto, TeamLogo } from '../components/media';
+import { NationBadge, PlayerPhoto, TeamLogo } from '../components/media';
 import { MiniCard } from '../components/PlayerCard';
-import { ACHIEVEMENTS } from '../../engine/achievements';
+import { achievementsFor } from '../../engine/achievements';
+import { isGM, lgOf, userTeam } from '../../engine/leagues';
+import { NATIONS } from '../../engine/intl';
+import { khlPlayoffResult } from '../../engine/khl';
 import { AWARD_NAMES } from '../../engine/awards';
 import { ATTR_RU, dateLong, money, POS_RU, seasonLabel, STATUS_RU } from '../format';
 import { GLOSSARY } from '../glossary';
@@ -56,7 +59,7 @@ export function CareerScreen() {
         <div className="flex items-end gap-2 mt-1"><div className="num text-[40px] leading-none">{o.trust}</div><div className="text-muted mb-1">/ 100 доверия</div></div>
         <Meter value={o.trust} className="mt-2" color={o.trust < 30 ? '#ff5a5f' : o.trust < 55 ? '#ffb547' : '#3ddc97'} height={8} />
         <div className="text-[14px] mt-3">Цель сезона: <b>{o.goalText}</b></div>
-        <div className="text-[12.5px] text-muted mt-1">Сложность: {{ rookie: 'новичок', real: 'реализм', hard: 'хардкор' }[L.settings.difficulty]} · предупреждений: {o.warnings}</div>
+        <div className="text-[12.5px] text-muted mt-1">Сложность: {{ rookie: 'новичок', real: 'реализм', hard: 'хардкор' }[L.settings.difficulty]} · {L.settings.noFiring ? 'без увольнения' : `предупреждений: ${o.warnings}`}</div>
       </Card>
       <div className="grid grid-cols-3 gap-2 mt-2">
         <div className="glass rounded-2xl px-3 py-2"><div className="text-[10.5px] uppercase text-muted">Сезонов</div><div className="num text-[22px]">{L.gm.seasons}</div></div>
@@ -83,9 +86,78 @@ export function CareerScreen() {
 
 export function HistoryScreen() {
   const L = useL();
-  const nav = useNav();
+  const [lg, setLg] = useState<'NHL' | 'KHL' | 'intl'>(L.teams[userTeam(L) ?? '']?.lg === 'KHL' ? 'KHL' : 'NHL');
   return (
     <Screen title="История" subtitle="Чемпионы и награды">
+      <Segmented value={lg} onChange={setLg} options={[{ v: 'NHL', label: 'НХЛ' }, ...(L.khl ? [{ v: 'KHL' as const, label: 'КХЛ' }] : []), { v: 'intl', label: 'Сборные' }]} />
+      {lg === 'NHL' && <NhlHistory />}
+      {lg === 'KHL' && <KhlHistory />}
+      {lg === 'intl' && <IntlHistory />}
+    </Screen>
+  );
+}
+
+function KhlHistory() {
+  const L = useL();
+  const nav = useNav();
+  const H = L.khl?.history ?? [];
+  return (
+    <div className="mt-3">
+      {!H.length && <Empty icon="📜" title="История пишется" text="Обладатели Кубка Гагарина появятся здесь. Действующий чемпион — «Локомотив» (2026)." />}
+      <div className="flex flex-col gap-2">
+        {H.map((h) => (
+          <Card key={h.season}>
+            <div className="flex items-center gap-3">
+              <TeamLogo id={h.champion} size={46} />
+              <div className="flex-1">
+                <div className="text-[12px] text-muted">{seasonLabel(h.season)}</div>
+                <div className="font-display uppercase text-[18px]">🏆 {L.teams[h.champion]?.name}</div>
+                <div className="text-[12.5px] text-muted">финал с {L.teams[h.finalist]?.short} · регулярка: {L.teams[h.regular]?.short}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {h.mvp && L.players[h.mvp] && <button className="press" onClick={() => nav.push('player', { id: h.mvp })}><Pill>MVP плей-офф: {L.players[h.mvp].ln}</Pill></button>}
+              {h.topScorer && <button className="press" onClick={() => nav.push('player', { id: h.topScorer!.id })}><Pill>Бомбардир: {h.topScorer.name} ({h.topScorer.pts})</Pill></button>}
+            </div>
+          </Card>
+        ))}
+      </div>
+      <SectionTitle>Кубки Гагарина</SectionTitle>
+      <div className="grid grid-cols-4 gap-2">
+        {Object.values(L.teams).filter((t) => t.lg === 'KHL' && t.cups > 0).sort((a, b) => b.cups - a.cups).map((t) => (
+          <div key={t.id} className={cx('glass rounded-2xl p-2 flex flex-col items-center', t.id === userTeam(L) && 'border-[var(--accent)]')}>
+            <TeamLogo id={t.id} size={30} />
+            <div className="num text-gold text-[16px] mt-1">{t.cups}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function IntlHistory() {
+  const L = useL();
+  const H = L.intl?.history ?? [];
+  if (!H.length) return <div className="mt-3"><Empty icon="🌍" title="Турниров ещё не было" text="Первый — чемпионат мира 2027 в Германии (14–30 мая)." /></div>;
+  return (
+    <div className="flex flex-col gap-2 mt-3">
+      {H.map((h) => (
+        <Card key={h.id} className="!py-3">
+          <div className="font-semibold text-[15px]">{h.name}</div>
+          <div className="flex gap-2 mt-2">
+            {h.medals.map((c, i) => <div key={c} className="flex items-center gap-1.5 text-[13px]"><span>{['🥇', '🥈', '🥉'][i]}</span><NationBadge code={c} size={22} /><span>{NATIONS[c]?.name}</span></div>)}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function NhlHistory() {
+  const L = useL();
+  const nav = useNav();
+  return (
+    <div className="mt-3">
       {!L.history.length && <Empty icon="📜" title="История пишется" text="Здесь появятся чемпионы и награды каждого сыгранного сезона." />}
       <div className="flex flex-col gap-2">
         {L.history.map((h) => (
@@ -104,35 +176,35 @@ export function HistoryScreen() {
                 return p ? <button key={k} onClick={() => nav.push('player', { id })} className="press"><Pill color={p.team === L.user ? 'var(--accent)' : undefined}>{AWARD_NAMES[k]?.split(' — ')[0].replace(' Трофи', '')}: {p.ln}</Pill></button> : null;
               })}
             </div>
-            <div className="text-[12.5px] text-muted mt-2">Ваш клуб: {h.userRecord.w}–{h.userRecord.l}–{h.userRecord.otl}, {h.userRecord.pts} оч., {h.userRecord.place}-е место</div>
+            {isGM(L) && !L.teams[L.user]?.lg && h.userRecord.place > 0 && <div className="text-[12.5px] text-muted mt-2">Ваш клуб: {h.userRecord.w}–{h.userRecord.l}–{h.userRecord.otl}, {h.userRecord.pts} оч., {h.userRecord.place}-е место</div>}
           </Card>
         ))}
       </div>
       <SectionTitle>Комната трофеев</SectionTitle>
       <div className="grid grid-cols-4 gap-2">
-        {Object.values(L.teams).sort((a, b) => b.cups - a.cups).slice(0, 12).map((t) => (
+        {Object.values(L.teams).filter((t) => !t.lg).sort((a, b) => b.cups - a.cups).slice(0, 12).map((t) => (
           <div key={t.id} className={cx('glass rounded-2xl p-2 flex flex-col items-center', t.id === L.user && 'border-[var(--accent)]')}>
             <TeamLogo id={t.id} size={30} />
             <div className="num text-gold text-[16px] mt-1">{t.cups}</div>
           </div>
         ))}
       </div>
-      {L.teams[L.user].retired.length > 0 && (
+      {isGM(L) && L.teams[L.user].retired.length > 0 && (
         <>
           <SectionTitle>Выведенные номера</SectionTitle>
           <div className="flex gap-2 flex-wrap">{L.teams[L.user].retired.map(([n, name, s]) => <Card key={n} className="!p-3 text-center"><div className="num text-[30px]">#{n}</div><div className="text-[12px] text-muted">{name} · {s}</div></Card>)}</div>
         </>
       )}
-    </Screen>
+    </div>
   );
 }
 
 export function AchievementsScreen() {
   const L = useL();
   return (
-    <Screen title="Достижения" subtitle={`${Object.keys(L.achievements).length} из ${ACHIEVEMENTS.length}`}>
+    <Screen title="Достижения" subtitle={`${achievementsFor(L).filter((a) => L.achievements[a.id]).length} из ${achievementsFor(L).length}`}>
       <div className="grid grid-cols-2 gap-2">
-        {ACHIEVEMENTS.map((a, i) => {
+        {achievementsFor(L).map((a, i) => {
           const got = L.achievements[a.id];
           return (
             <motion.div key={a.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.02 }} className={cx('glass rounded-3xl p-3.5', !got && 'opacity-45 grayscale')}>
@@ -291,7 +363,8 @@ export function GlossaryScreen() {
 export function SettingsScreen() {
   const L = useL();
   const { act, quit, toast, save } = useGame.getState();
-  const Toggle = ({ k, label, sub }: { k: 'sound' | 'assistant' | 'stopOnUserGames' | 'watchGames' | 'hideMedia'; label: string; sub: string }) => (
+  const nav = useNav();
+  const Toggle = ({ k, label, sub }: { k: 'sound' | 'assistant' | 'stopOnUserGames' | 'watchGames' | 'hideMedia' | 'noFiring' | 'intlRussia'; label: string; sub: string }) => (
     <button onClick={() => act((L) => (L.settings[k] = !L.settings[k]))} className="press w-full flex items-center gap-3 px-4 py-3 text-left">
       <div className="flex-1"><div className="text-[15px] font-medium">{label}</div><div className="text-[12.5px] text-muted">{sub}</div></div>
       <div className={cx('w-12 h-7 rounded-full p-0.5 transition-colors shrink-0', L.settings[k] ? 'accent-bg' : 'bg-white/15')}>
@@ -312,9 +385,28 @@ export function SettingsScreen() {
         <div className="h-px bg-white/[0.06]" />
         <Toggle k="hideMedia" label="Без пресс-конференций" sub="Не приглашать на пресс-конференции" />
       </Card>
+      <SectionTitle>Карьера и сборные</SectionTitle>
+      <Card pad={false} className="overflow-hidden">
+        {isGM(L) && (
+          <>
+            <Toggle k="noFiring" label="Без увольнения" sub="Владелец может быть недоволен, но не уволит вас" />
+            <div className="h-px bg-white/[0.06]" />
+          </>
+        )}
+        <Toggle k="intlRussia" label="Россия и Беларусь на турнирах IIHF" sub="В реальности сборные отстранены с 2022 года. Включите, чтобы они играли ЧМ и Олимпиады (со следующего турнира)" />
+        {isGM(L) && (
+          <>
+            <div className="h-px bg-white/[0.06]" />
+            <button onClick={() => nav.push('intl')} className="press w-full flex items-center gap-3 px-4 py-3 text-left">
+              <div className="flex-1"><div className="text-[15px] font-medium">Сборная</div><div className="text-[12.5px] text-muted">{L.intl?.coach ? `Вы тренер: ${NATIONS[L.intl.coach]?.name}` : 'Можно возглавить сборную и выбирать составы'}</div></div>
+              <Icon name="back" size={18} className="rotate-180 text-muted" />
+            </button>
+          </>
+        )}
+      </Card>
       <SectionTitle>Сложность</SectionTitle>
       <Segmented value={L.settings.difficulty} onChange={(v) => { if (L.settings.ironman) return toast('В режиме «Железный человек» сложность менять нельзя', 'bad'); act((L) => (L.settings.difficulty = v)); }} options={[{ v: 'rookie', label: 'Новичок' }, { v: 'real', label: 'Реализм' }, { v: 'hard', label: 'Хардкор' }]} />
-      <div className="text-[12.5px] text-muted mt-2 px-1">Сложность меняет только поведение ИИ-менеджеров и терпение владельца. Шансы в матчах всегда одинаковые.</div>
+      <div className="text-[12.5px] text-muted mt-2 px-1">{isGM(L) ? 'Сложность меняет только поведение ИИ-менеджеров и терпение владельца. Шансы в матчах всегда одинаковые.' : 'В карьере игрока сложность задаёт стартовый уровень и потолок развития (меняется только при создании). Шансы в матчах всегда одинаковые.'}</div>
       <SectionTitle>Сохранение</SectionTitle>
       <div className="flex flex-col gap-2">
         <Button full onClick={async () => { await save(); toast('Сохранено', 'good'); }}>Сохранить сейчас</Button>
@@ -329,14 +421,16 @@ export function SettingsScreen() {
 
 // ---------- Celebration & Wrapped ----------
 
-export function CelebrationModal() {
+export function CelebrationModal({ params }: { params: Record<string, unknown> }) {
   const L = useL();
   const close = useNav((s) => s.closeModal);
-  const t = L.teams[L.user];
+  const khl = params.lg === 'KHL';
+  const t = L.teams[userTeam(L) ?? L.user];
   useEffect(() => { if (L.settings.sound) { horn(); setTimeout(chime, 1200); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const confetti = useMemo(() => Array.from({ length: 70 }, (_, i) => ({ x: Math.random() * 100, d: 2.5 + Math.random() * 3, delay: Math.random() * 2, c: [t.accent, '#e8c26a', '#ffffff', t.secondary][i % 4], r: Math.random() * 360 })), [t]);
-  const po = L.playoffs;
-  const conn = po?.conn ? L.players[po.conn] : null;
+  const po = khl ? L.khl?.playoffs : L.playoffs;
+  const mvpId = khl ? L.khl?.history[0]?.mvp : po?.conn;
+  const conn = mvpId ? L.players[mvpId] : null;
   return (
     <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-center text-center px-6" style={{ background: `radial-gradient(120% 70% at 50% 30%, ${t.primary}, #05070d 70%)` }}>
       {confetti.map((c, i) => (
@@ -346,14 +440,14 @@ export function CelebrationModal() {
         <motion.div animate={{ y: [0, -12, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}><CupMark size={170} /></motion.div>
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
-        <div className="text-[13px] uppercase tracking-[0.3em] text-gold mt-6">Кубок Стэнли {L.season + 1}</div>
+        <div className="text-[13px] uppercase tracking-[0.3em] text-gold mt-6">{khl ? 'Кубок Гагарина' : 'Кубок Стэнли'} {L.season + 1}</div>
         <div className="font-display uppercase text-[40px] leading-none mt-2 text-gradient-gold">Чемпионы!</div>
         <div className="flex items-center justify-center gap-3 mt-4"><TeamLogo id={t.id} size={48} /><div className="font-display uppercase text-[22px]">{t.name}</div></div>
-        {conn && <div className="text-[14px] text-white/75 mt-4">Конн Смайт Трофи: {conn.fn} {conn.ln}</div>}
-        <div className="text-[13px] text-white/60 mt-1">{L.gm.name} — {L.gm.cups}-й Кубок в карьере</div>
+        {conn && <div className="text-[14px] text-white/75 mt-4">{khl ? 'MVP плей-офф' : 'Конн Смайт Трофи'}: {conn.fn} {conn.ln}</div>}
+        <div className="text-[13px] text-white/60 mt-1">{isGM(L) ? `${L.gm.name} — ${L.gm.cups}-й кубок в карьере` : `${L.gm.name} — чемпион!`}</div>
       </motion.div>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.6 }} className="absolute bottom-0 inset-x-0 px-6 pb-safe">
-        <Button variant="gold" size="lg" full className="mb-4" onClick={() => { close(); useNav.getState().openModal('wrapped'); }}>Итоги сезона</Button>
+        <Button variant="gold" size="lg" full className="mb-4" onClick={() => { close(); if (isGM(L) && !khl) useNav.getState().openModal('wrapped'); }}>{isGM(L) && !khl ? 'Итоги сезона' : 'Продолжить'}</Button>
       </motion.div>
     </div>
   );
@@ -375,7 +469,7 @@ export function WrappedModal() {
   const best = trades.sort((a, b) => (b.a === L.user ? b.grades?.a : b.grades?.b)?.localeCompare((a.a === L.user ? a.grades?.a : a.grades?.b) ?? '') ?? 0)[0];
   const slides = [
     { bg: t.primary, title: `Сезон ${seasonLabel(season)}`, big: h ? `${h.userRecord.w}–${h.userRecord.l}–${h.userRecord.otl}` : '—', sub: h ? `${h.userRecord.pts} очков · ${h.userRecord.place}-е место в лиге` : '' },
-    { bg: '#1b2a44', title: 'Итог', big: ['Мимо плей-офф', '1-й раунд', '2-й раунд', 'Финал конференции', 'Финал Кубка', 'КУБОК СТЭНЛИ'][h?.userRecord.playoffRound ?? 0], sub: h ? `Чемпион: ${L.teams[h.champion]?.name}` : '' },
+    { bg: '#1b2a44', title: 'Итог', big: lgOf(t) === 'KHL' ? ['Мимо плей-офф', '1-й раунд', '2-й раунд', 'Полуфинал', 'Финал', 'КУБОК ГАГАРИНА'][khlPlayoffResult(L, L.user)] : ['Мимо плей-офф', '1-й раунд', '2-й раунд', 'Финал конференции', 'Финал Кубка', 'КУБОК СТЭНЛИ'][h?.userRecord.playoffRound ?? 0], sub: h ? `Чемпион НХЛ: ${L.teams[h.champion]?.name}` : '' },
     ...(top ? [{ bg: '#2b1a3a', title: 'Лучший бомбардир', big: `${top.fn} ${top.ln}`, sub: `${(top.stats[key] as SkaterLine).g} + ${(top.stats[key] as SkaterLine).a} = ${(top.stats[key] as SkaterLine).pts} очков`, p: top }] : []),
     ...(rookie && rookie !== top ? [{ bg: '#123a2e', title: 'Открытие сезона', big: `${rookie.fn} ${rookie.ln}`, sub: `${(rookie.stats[key] as SkaterLine).pts} очков в ${ageOn(rookie.bd, L.date)} лет`, p: rookie }] : []),
     { bg: '#3a2a12', title: 'Работа GM', big: `${trades.length} обм. · ${L.seasonLog.signings} контр.`, sub: best ? `Лучшая сделка: ${(best.a === L.user ? best.aGets : best.bGets).names.join(', ')} (${best.a === L.user ? best.grades?.a : best.grades?.b})` : `Вложено в контракты: ${money(L.seasonLog.spent)}` },

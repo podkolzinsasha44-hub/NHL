@@ -99,7 +99,7 @@ export function knowOf(L: League, p: Player) {
 
 /** The user's view of a prospect's potential: a range that narrows with scouting. */
 export function potRange(L: League, p: Player): [number, number] {
-  if (p.team === L.user && p.st === 'NHL') return [p.pot, p.pot];
+  if ((p.team === L.user && p.st === 'NHL') || p.id === L.pro?.pid) return [p.pot, p.pot];
   const know = knowOf(L, p);
   const width = Math.round((1 - know) * 14) + 2;
   const bias = (hash01(p.id, 77) - 0.5) * (1 - know) * 10;

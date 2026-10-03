@@ -45,7 +45,8 @@ export function createProPlayer(L: League, o: ProCreate) {
   p.ovr = lv.ovr;
   p.hist = [[L.season, p.ovr]];
   const khl = lgOf(L.teams[club]) === 'KHL';
-  const aav = roundSalary(valueFor(L, p, club, L.season) * 1.1, khl ? 'KHL' : 'NHL');
+  // A first professional deal: paid for today's level, not for the potential (KHL juniors earn little).
+  const aav = roundSalary(valueFor(L, { ...p, pot: p.ovr }, club, L.season) * 0.4, khl ? 'KHL' : 'NHL');
   p.c = { aav, last: L.season + 1, type: 'STD', clause: null, exp: 'RFA', signed: L.season };
   p.lg = khl ? 'KHL' : 'NHL';
   L.pro = { pid: p.id, agent: pick(AGENTS), season0: L.season, offers: [], trust: 55, log: [] };

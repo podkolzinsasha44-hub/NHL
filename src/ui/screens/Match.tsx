@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useL } from '../../store/game';
+import { userTeam } from '../../engine/leagues';
 import { useNav } from '../../store/nav';
 import { lastUserBox } from '../../engine/season';
 import type { GameEvent } from '../../engine/types';
@@ -39,7 +40,7 @@ export function MatchScreen({ params }: { params: Record<string, unknown> }) {
       shownGoals.current = goals.length;
       if (live) {
         setFlash(e);
-        if (e.team === L.user && L.settings.sound) horn();
+        if (e.team === userTeam(L) && L.settings.sound) horn();
         const id = setTimeout(() => setFlash(null), 1600);
         return () => clearTimeout(id);
       }

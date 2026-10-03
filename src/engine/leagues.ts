@@ -46,6 +46,21 @@ export function userLg(L: League): LeagueId {
   return teamLg(L, userTeam(L)) ?? 'NHL';
 }
 
+/** Calendar phase of the user's league (the KHL has its own season). */
+export function userPhase(L: League): 'preseason' | 'regular' | 'playoffs' | 'offseason' | 'draft' | 'freeagency' {
+  if (userLg(L) === 'KHL' && L.khl) {
+    // In summer both leagues share the July 1 market.
+    if (L.khl.phase === 'offseason' && L.phase === 'freeagency') return 'freeagency';
+    return L.khl.phase;
+  }
+  return L.phase;
+}
+
+/** Trade deadline of the user's league. */
+export function userDeadline(L: League) {
+  return userLg(L) === 'KHL' && L.khl ? L.khl.deadline : L.deadline;
+}
+
 /** The user is the GM of an NHL club (draft, NHL scouting and waivers matter). */
 export const isNhlGM = (L: League) => isGM(L) && isNhlTeam(L, L.user);
 export const isKhlGM = (L: League) => isGM(L) && teamLg(L, L.user) === 'KHL';

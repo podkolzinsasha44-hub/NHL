@@ -7,7 +7,7 @@ import { genPlayer } from './gen';
 import { int, next, normal, pick, shuffle, weighted } from './rng';
 import { emptyRecord, sortedTeams } from './standings';
 import { autoLines, emptyLines } from './lines';
-import { capHit, capIn, floorIn, marketValueIn, roundSalary } from './contracts';
+import { capHit, capIn, contractCount, floorIn, marketValueIn, roundSalary } from './contracts';
 import { pushMsg, pushNews, social } from './news';
 import { statKey } from './stats';
 import type { Game, League, Player, PlayoffSeries, SkaterLine, Team } from './types';
@@ -112,10 +112,15 @@ const KHL_CUPS: Record<string, number> = { AKB: 3, CSK: 3, MMG: 3, DMS: 2, SKA: 
 
 /** Next season's schedule (called on July 1 together with the NHL schedule). */
 export function buildKhlSeason(L: League) {
-  if (!L.khl) return;
-  let start = `${L.season}-09-05`;
-  // Opening night on a Friday or Saturday around September 5.
+  let start = `${L.season}-09-03`;
+  // Opening night on the first Friday or Saturday from September 3 (2026-27 opened on Sep 5).
   while (![5, 6].includes(new Date(start + 'T12:00:00Z').getUTCDay())) start = addDays(start, 1);
+  // Careers saved before the KHL existed: the league is founded for the new season.
+  if (!L.khl) {
+    initKhl(L, start);
+    pushNews(L, { kind: 'league', important: true, title: 'КХЛ в игре: 22 клуба начинают сезон', body: 'Теперь в мире игры есть Континентальная хоккейная лига — с календарём, плей-офф и Кубком Гагарина.' });
+    return;
+  }
   L.khl.phase = 'preseason';
   L.khl.seasonStart = start;
   L.khl.deadline = `${L.season + 1}-01-25`;
@@ -167,7 +172,8 @@ function assignDays(pairs: [string, string][], start: string, end: string): [str
   let d = 0;
   while (left.length && d < totalDays + 120) {
     const day = addDays(start, d);
-    const daysLeft = Math.max(1, totalDays - d);
+    // Aim to finish two days early so the calendar never spills past the last date.
+    const daysLeft = Math.max(1, totalDays - d - 2);
     const quota = Math.max(1, Math.min(11, Math.round(left.length / daysLeft + normal(0, 1))));
     const busy = new Set<string>();
     // Clubs with many games left go first, so nobody piles up games at the end.
@@ -386,7 +392,7 @@ function reviewKhlGM(L: League) {
 export function khlYouthIntake(L: League) {
   for (const c of KHL_CLUBS) {
     if (!L.teams[c.id]) continue;
-    const n = int(2, 3);
+    const n = Math.min(int(2, 3), 50 - contractCount(L, c.id));
     for (let i = 0; i < n; i++) {
       const age = int(17, 19);
       const gem = next() < 0.08;

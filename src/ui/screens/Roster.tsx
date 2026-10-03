@@ -9,7 +9,8 @@ import { PlayerRow } from '../components/rows';
 import { PlayerPhoto } from '../components/media';
 import { capSummary } from '../../engine/contracts';
 import { autoLines, available } from '../../engine/lines';
-import { money, POS_RU } from '../format';
+import { money, POS_RU, rosterLabels } from '../format';
+import { isNhlGM } from '../../engine/leagues';
 import { callUp, signElc } from '../actions';
 import { statKey, sl } from '../../engine/stats';
 import { Term } from '../components/Term';
@@ -21,20 +22,25 @@ export function Roster({ params }: { params: Record<string, unknown> }) {
   const [view, setView] = useState<View>((params.view as View) ?? 'lines');
   const cap = capSummary(L, L.user);
   const org = Object.values(L.players).filter((p) => p.team === L.user && p.st !== 'RET');
+  const lb = rosterLabels(L, L.user);
+  const nhlGM = isNhlGM(L);
+  // Draftees playing for KHL clubs: the rights are ours, the contract is theirs.
+  const abroad = nhlGM ? Object.values(L.players).filter((p) => p.rights === L.user && p.st !== 'RET') : [];
+  const opts = [{ v: 'lines' as View, label: 'Звенья' }, { v: 'nhl' as View, label: nhlGM ? 'НХЛ' : 'Основа' }, { v: 'ahl' as View, label: lb.farm }, ...(nhlGM ? [{ v: 'rights' as View, label: 'Права' }] : [])];
   return (
     <Screen
       title="Состав"
-      subtitle={`${org.filter((p) => p.st === 'NHL').length} в НХЛ · ${org.filter((p) => p.st === 'AHL').length} в АХЛ · ${money(cap.space)} под потолком`}
+      subtitle={`${org.filter((p) => p.st === 'NHL').length} в ${nhlGM ? 'НХЛ' : 'основе'} · ${org.filter((p) => p.st === 'AHL').length} в ${lb.farm} · ${money(cap.space)} под потолком`}
       headerExtra={
         <div className="px-4 pb-2">
-          <Segmented value={view} onChange={setView} options={[{ v: 'lines', label: 'Звенья' }, { v: 'nhl', label: 'НХЛ' }, { v: 'ahl', label: 'АХЛ' }, { v: 'rights', label: 'Права' }]} />
+          <Segmented value={view} onChange={setView} options={opts} />
         </div>
       }
     >
       {view === 'lines' && <LinesEditor L={L} />}
       {view === 'nhl' && <RosterList L={L} players={org.filter((p) => p.st === 'NHL')} />}
       {view === 'ahl' && <AhlList L={L} players={org.filter((p) => p.st === 'AHL')} />}
-      {view === 'rights' && <RightsList L={L} players={org.filter((p) => p.st !== 'NHL' && p.st !== 'AHL')} />}
+      {view === 'rights' && <RightsList L={L} players={[...org.filter((p) => p.st !== 'NHL' && p.st !== 'AHL'), ...abroad]} />}
     </Screen>
   );
 }
@@ -204,18 +210,22 @@ function RightsList({ L, players }: { L: League; players: Player[] }) {
   if (!players.length) return <Empty title="Нет прав на игроков" text="Здесь появятся задрафтованные проспекты, которые ещё не подписали контракт." />;
   return (
     <div>
-      <div className="text-[13px] text-muted px-1 mb-2">Задрафтованные игроки в юниорских лигах, NCAA и Европе. Права действуют до 22 лет — подпишите контракт новичка (<Term k="elc">ELC</Term>), чтобы не потерять их.</div>
+      <div className="text-[13px] text-muted px-1 mb-2">Задрафтованные игроки в юниорских лигах, NCAA и Европе. Права действуют до 22 лет — подпишите контракт новичка (<Term k="elc">ELC</Term>), чтобы не потерять их. Игроки клубов КХЛ доступны, когда закончится их контракт там.</div>
       <div className="glass rounded-3xl py-1">
-        {[...players].sort((a, b) => b.pot - a.pot).map((p) => (
-          <PlayerRow
-            key={p.id}
-            p={p}
-            L={L}
-            showPot
-            sub={`${POS_RU[p.pos]} · ${p.lg ?? p.st} · права до ${(p.rightsUntil ?? L.season) + 1}`}
-            right={!p.c ? <Button size="sm" variant="primary" onClick={() => signElc(p)}>ELC</Button> : <Ovr v={p.ovr} size={0} className="hidden" />}
-          />
-        ))}
+        {[...players].sort((a, b) => b.pot - a.pot).map((p) => {
+          const khlClub = p.rights === L.user && p.team ? L.teams[p.team] : null;
+          const locked = !!khlClub && !!p.c && p.c.last >= L.season;
+          return (
+            <PlayerRow
+              key={p.id}
+              p={p}
+              L={L}
+              showPot
+              sub={khlClub ? `${POS_RU[p.pos]} · ${khlClub.short} (КХЛ) до ${(p.c?.last ?? L.season) + 1} · права до ${(p.rightsUntil ?? L.season) + 1}` : `${POS_RU[p.pos]} · ${p.lg ?? p.st} · права до ${(p.rightsUntil ?? L.season) + 1}`}
+              right={!locked && (!p.c || p.rights === L.user) ? <Button size="sm" variant="primary" onClick={() => signElc(p)}>ELC</Button> : <Ovr v={p.ovr} size={0} className="hidden" />}
+            />
+          );
+        })}
       </div>
     </div>
   );

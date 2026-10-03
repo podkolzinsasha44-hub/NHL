@@ -6,9 +6,9 @@ import { Screen } from '../components/shell';
 import { Button, Card, Chips, cx, Meter, Pill, SectionTitle, Segmented, Stat } from '../components/kit';
 import { PlayerRow } from '../components/rows';
 import { TeamLogo } from '../components/media';
-import { capHit, capSpace, extensionOf } from '../../engine/contracts';
-import { money, recordStr, seasonLabel } from '../format';
-import { capOf } from '../../engine/util';
+import { capFor, capHit, capSpace, extensionOf, floorFor, minSalaryFor } from '../../engine/contracts';
+import { money, moneyOf, recordStr, rosterLabels, seasonLabel } from '../format';
+import { isGM, LG_RU, lgOf, userLg } from '../../engine/leagues';
 import { pickLabel, projectedSlot, tradesOpen } from '../../engine/trades';
 import { teamPower } from '../../engine/lines';
 import { Term } from '../components/Term';
@@ -22,7 +22,7 @@ export function FinanceScreen() {
   const rows = mine
     .map((p) => {
       const vals = seasons.map((s) => {
-        if (p.c && p.c.last >= s && (s > L.season || p.st === 'NHL' || p.c.aav > 1_225_000)) return p.c.aav - (p.c.retainedBy?.reduce((a, r) => a + r.amount, 0) ?? 0);
+        if (p.c && p.c.last >= s && (s > L.season || p.st === 'NHL' || p.c.aav > (lgOf(L.teams[L.user]) === 'KHL' ? minSalaryFor(L, L.user) * 4 : 1_225_000))) return p.c.aav - (p.c.retainedBy?.reduce((a, r) => a + r.amount, 0) ?? 0);
         const e = extensionOf(p);
         if (e && e.last >= s && p.c && s > p.c.last) return e.aav;
         return 0;
@@ -32,15 +32,17 @@ export function FinanceScreen() {
     .filter((r) => r.vals.some((v) => v > 0))
     .sort((a, b) => b.vals[0] - a.vals[0]);
   const dead = L.dead.filter((d) => d.team === L.user && d.season >= L.season);
+  const khl = lgOf(L.teams[L.user]) === 'KHL';
+  const farm = rosterLabels(L, L.user).farm;
   return (
     <Screen title="Финансы" subtitle="Кэп-лист на 5 сезонов">
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="Потолок" value={money(capOf(L), 1)} />
+        <Stat label="Потолок" value={money(capFor(L, L.user), 1)} />
         <Stat label="Занято" value={money(capHit(L, L.user), 1)} />
         <Stat label="Свободно" value={money(capSpace(L, L.user), 1)} good={capSpace(L, L.user) >= 0} accent={capSpace(L, L.user) < 0} />
       </div>
       <Card className="mt-2 !py-3 text-[13px] text-muted">
-        <Term k="cap">Потолок</Term> {seasonLabel(L.season)}: {money(capOf(L))}, следующий сезон: {money(capOf(L, L.season + 1))}. <Term k="floor">Нижняя граница</Term>: {money(L.meta.floor[L.season] ?? capOf(L) * 0.74)}. В АХЛ на потолок засчитывается только часть зарплаты выше {money(L.meta.minSalary[L.season] + 375_000)}.
+        <Term k="cap">Потолок</Term> {seasonLabel(L.season)}: {money(capFor(L, L.user))}, следующий сезон: {money(capFor(L, L.user, L.season + 1))}. <Term k="floor">Нижняя граница</Term>: {money(floorFor(L, L.user))}. В {farm} на потолок засчитывается только часть зарплаты выше {money(khl ? minSalaryFor(L, L.user) * 4 : minSalaryFor(L, L.user) + 375_000)}.{khl ? ' Суммы КХЛ — в рублях (по курсу-ориентиру). Потолок КХЛ: ₽950 млн в 2026-27 и ₽1 млрд в 2027-28.' : ''}
       </Card>
       <SectionTitle>Контракты</SectionTitle>
       <Card pad={false} className="overflow-x-auto">
@@ -54,7 +56,7 @@ export function FinanceScreen() {
           <tbody>
             {rows.map(({ p, vals }) => (
               <tr key={p.id} className="border-t hairline">
-                <td className="px-3 py-2 sticky left-0 bg-[#0d1220] whitespace-nowrap">{p.fn[0]}. {p.ln} <span className="text-faint">{p.st === 'AHL' ? 'АХЛ' : ''}{p.c?.clause ? ` ${p.c.clause}` : ''}</span></td>
+                <td className="px-3 py-2 sticky left-0 bg-[#0d1220] whitespace-nowrap">{p.fn[0]}. {p.ln} <span className="text-faint">{p.st === 'AHL' ? farm : ''}{p.c?.clause ? ` ${p.c.clause}` : ''}</span></td>
                 {vals.map((v, i) => <td key={i} className={cx('text-right pr-3', !v && 'text-faint', p.c && i === p.c.last - L.season && (p.c.exp === 'UFA' ? 'text-warn' : 'text-ice'))}>{v ? money(v, 1) : '—'}</td>)}
               </tr>
             ))}
@@ -167,18 +169,20 @@ export function TeamScreen({ params }: { params: Record<string, unknown> }) {
   const prospects = Object.values(L.players).filter((p) => p.team === t.id && p.st !== 'NHL' && p.st !== 'RET').sort((a, b) => b.pot - a.pot).slice(0, 20);
   const picks = L.picks.filter((p) => p.owner === t.id && !p.used).sort((a, b) => a.season - b.season || a.round - b.round);
   const stratRu = { contend: 'Претендент', bubble: 'Середняк', rebuild: 'Перестройка' } as const;
+  const lg = lgOf(t);
+  const canTrade = isGM(L) && t.id !== L.user && lg === userLg(L) && tradesOpen(L, lg);
   return (
     <Screen title={t.name} subtitle={`${recordStr(t)} · ${t.rec.pts} оч.`}>
       <div className="flex items-center gap-4 py-2">
         <TeamLogo id={t.id} size={72} />
         <div className="flex-1">
-          <div className="flex gap-2 flex-wrap"><Pill>{stratRu[t.strategy]}</Pill><Pill>Сила {teamPower(L, t).toFixed(1)}</Pill>{t.cups > 0 && <Pill color="#e8c26a">🏆 ×{t.cups}</Pill>}</div>
-          <div className="text-[13px] text-muted mt-2">Под потолком: {money(capSpace(L, t.id))} · тренер {t.coach.name}</div>
-          {t.id !== L.user && <div className="mt-1.5"><div className="text-[11px] text-muted">Отношения с вами</div><Meter value={t.rel} className="w-40" /></div>}
+          <div className="flex gap-2 flex-wrap"><Pill>{LG_RU[lg]}</Pill><Pill>{stratRu[t.strategy]}</Pill><Pill>Сила {teamPower(L, t).toFixed(1)}</Pill>{t.cups > 0 && <Pill color="#e8c26a">🏆 ×{t.cups}</Pill>}</div>
+          <div className="text-[13px] text-muted mt-2">{t.city ? `${t.city} · ` : ''}под потолком: {moneyOf(L, t.id, capSpace(L, t.id))} · тренер {t.coach.name}</div>
+          {isGM(L) && t.id !== L.user && lg === userLg(L) && <div className="mt-1.5"><div className="text-[11px] text-muted">Отношения с вами</div><Meter value={t.rel} className="w-40" /></div>}
         </div>
       </div>
-      {t.id !== L.user && tradesOpen(L) && <Button variant="primary" full onClick={() => nav.go('market', 'trade', { team: t.id })}>Предложить обмен</Button>}
-      <div className="mt-3"><Chips value={tab} onChange={setTab} options={[{ v: 'roster', label: `Состав · ${roster.length}` }, { v: 'picks', label: `Пики · ${picks.length}` }, { v: 'info', label: 'Проспекты' }]} /></div>
+      {canTrade && <Button variant="primary" full onClick={() => nav.go('market', 'trade', { team: t.id })}>Предложить обмен</Button>}
+      <div className="mt-3"><Chips value={tab} onChange={setTab} options={lg === 'KHL' ? [{ v: 'roster', label: `Состав · ${roster.length}` }, { v: 'info', label: 'Молодёжь и ВХЛ' }] : [{ v: 'roster', label: `Состав · ${roster.length}` }, { v: 'picks', label: `Пики · ${picks.length}` }, { v: 'info', label: 'Проспекты' }]} /></div>
       {tab === 'roster' && <div className="glass rounded-3xl py-1 mt-3">{roster.map((p) => <PlayerRow key={p.id} p={p} L={L} />)}</div>}
       {tab === 'info' && <div className="glass rounded-3xl py-1 mt-3">{prospects.map((p) => <PlayerRow key={p.id} p={p} L={L} showPot />)}</div>}
       {tab === 'picks' && (

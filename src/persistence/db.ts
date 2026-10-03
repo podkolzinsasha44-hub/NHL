@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { League } from '../engine/types';
+import { isGM, userTeam } from '../engine/leagues';
 
 export interface SaveMeta {
   id: string;
@@ -40,10 +41,11 @@ function setLast(id: string) {
 }
 
 export async function saveLeague(id: string, L: League) {
+  const ut = userTeam(L);
   const meta: SaveMeta = {
     id,
-    name: `${L.gm.name} · ${L.teams[L.user].name}`,
-    team: L.user,
+    name: isGM(L) ? `${L.gm.name} · ${L.teams[L.user].name}` : `🏒 ${L.gm.name} · ${ut ? L.teams[ut].name : 'без клуба'}`,
+    team: ut ?? '',
     season: L.season,
     date: L.date,
     updated: Date.now(),

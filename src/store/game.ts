@@ -6,6 +6,10 @@ import { advanceDay, lastUserBox } from '../engine/season';
 import { saveLeague, loadLeague, requestPersistence } from '../persistence/db';
 import { useNav } from './nav';
 import { checkAchievements } from '../engine/achievements';
+import { isGM, userDeadline, userLg, userPhase, userTeam } from '../engine/leagues';
+import { initIntl } from '../engine/intl';
+import { getState, useState_ } from '../engine/rng';
+import { setMoneyLeague } from '../ui/format';
 
 export type SimMode = 'day' | 'game' | 'week' | 'event' | 'deadline' | 'regular' | 'season' | 'date';
 
@@ -49,12 +53,14 @@ interface GameState {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let toastId = 1;
 
-const ALWAYS = new Set(['playoffs', 'cup', 'champion', 'draft', 'fa', 'expiring', 'camp', 'regular-end']);
-const EVENT = new Set([...ALWAYS, 'deadline', 'offer', 'injury', 'eliminated', 'series-won', 'fa-day1']);
+const ALWAYS = new Set(['playoffs', 'cup', 'champion', 'draft', 'fa', 'expiring', 'camp', 'regular-end', 'intl-select', 'intl-call', 'pro-offer', 'pro-drafted', 'pro-traded']);
+const EVENT = new Set([...ALWAYS, 'deadline', 'offer', 'injury', 'eliminated', 'series-won', 'fa-day1', 'intl-final']);
 
 export function applyTheme(L: League | null) {
   const root = document.documentElement;
-  const t = L?.teams[L.user];
+  const ut = L ? userTeam(L) : null;
+  const t = L && ut ? L.teams[ut] : null;
+  setMoneyLeague(L ? userLg(L) : 'NHL');
   root.style.setProperty('--accent', t?.accent ?? '#7fd3ff');
   root.style.setProperty('--team', t?.primary ?? '#0a1428');
   root.style.setProperty('--team2', t?.secondary ?? '#7fd3ff');
@@ -130,7 +136,7 @@ export const useGame = create<GameState>((set, get) => ({
       sim.days++;
       if (rep.userGame) {
         const g = rep.userGame.game;
-        const won = g.h === L.user ? (g.hs ?? 0) > (g.as ?? 0) : (g.as ?? 0) > (g.hs ?? 0);
+        const won = g.h === userTeam(L) ? (g.hs ?? 0) > (g.as ?? 0) : (g.as ?? 0) > (g.hs ?? 0);
         sim.last = { game: g, won };
         sim.results.push({ game: g, won });
       }
@@ -141,10 +147,11 @@ export const useGame = create<GameState>((set, get) => ({
       if (mode === 'game' && rep.userGame) break;
       if (mode === 'week' && sim.days >= 7) break;
       if (mode === 'event' && L.settings.stopOnUserGames && rep.userGame) break;
-      if (mode === 'deadline' && L.date >= L.deadline) break;
+      if (L.pro?.retired) break;
+      if (mode === 'deadline' && L.date >= userDeadline(L)) break;
       if (mode === 'date' && target && L.date >= target) break;
-      if (mode === 'regular' && L.phase !== 'regular' && L.phase !== 'preseason') break;
-      if (mode === 'season' && L.phase === 'offseason') break;
+      if (mode === 'regular' && userPhase(L) !== 'regular' && userPhase(L) !== 'preseason') break;
+      if (mode === 'season' && userPhase(L) === 'offseason') break;
       if (sim.days > 420) break;
       if (performance.now() - budgetStart > 34) {
         set({ sim: { ...sim }, ver: get().ver + 1 });
@@ -194,15 +201,19 @@ function onStop(reason: string | null, mode: SimMode, watch = false) {
   const nav = useNav.getState();
   const L = useGame.getState().L!;
   if (L.gm.fired) return nav.go('more', 'career');
+  const khl = userLg(L) === 'KHL';
   if (reason === 'cup' || reason === 'champion') {
-    if (L.playoffs?.champion === L.user) nav.openModal('celebration');
-    else nav.go('league', 'playoffs');
+    const champ = khl ? L.khl?.playoffs?.champion : L.playoffs?.champion;
+    if (champ && champ === userTeam(L)) nav.openModal('celebration', { lg: khl ? 'KHL' : 'NHL' });
+    else nav.go('league', 'playoffs', { lg: khl ? 'KHL' : 'NHL' });
     return;
   }
+  if (reason === 'intl-select' || reason === 'intl-call' || reason === 'intl-final') return nav.go('more', 'intl');
+  if (reason === 'pro-offer' || reason === 'pro-drafted' || reason === 'pro-traded') return nav.go(reason === 'pro-offer' ? 'market' : 'office');
   if (reason === 'draft') return nav.go('more', 'draftRoom');
   if (reason === 'fa' || reason === 'fa-day1') return nav.go('market', 'market', { tab: 'fa' });
   if (reason === 'expiring') return nav.go('market', 'market', { tab: 'ext' });
-  if (reason === 'playoffs') return nav.go('league', 'playoffs');
+  if (reason === 'playoffs') return nav.go('league', 'playoffs', { lg: khl ? 'KHL' : 'NHL' });
   if (mode === 'game' && (watch || L.settings.watchGames) && lastUserBox) nav.openModal('match', { live: true, id: lastUserBox.game.id });
 }
 
@@ -213,7 +224,16 @@ function migrate(L: League) {
   L.flags ??= {};
   L.album ??= [];
   L.watch ??= [];
+  L.mode ??= 'gm';
+  // Careers started before national teams existed get them now (the KHL joins on the next July 1).
+  if (!L.intl) {
+    useState_(L.rng);
+    initIntl(L);
+    L.rng = getState();
+  }
 }
+
+export { isGM };
 
 export function useL(): League {
   useGame((s) => s.ver);

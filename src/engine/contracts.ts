@@ -424,7 +424,8 @@ export function buyout(L: League, p: Player) {
   const dead = deadCap(L);
   const start = beforeNewLeagueYear(L) ? L.season + 1 : L.season;
   for (let i = 0; i < b.years; i++) dead.push({ team, season: start + i, amount: Math.round(b.perYear), name: `${p.fn} ${p.ln}` });
-  pushNews(L, { kind: 'sign', title: `${L.teams[team].short} выкупают контракт ${p.fn} ${p.ln}`, team, players: [p.id], important: team === L.user });
+  const verb = lgFor(L, team) === 'KHL' ? 'расторгают контракт с' : 'выкупают контракт';
+  pushNews(L, { kind: 'sign', title: `${L.teams[team].short} ${verb} ${p.fn} ${p.ln}`, team, players: [p.id], important: team === L.user });
   makeFreeAgent(L, p);
   return true;
 }

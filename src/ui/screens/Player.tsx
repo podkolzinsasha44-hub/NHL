@@ -6,9 +6,11 @@ import { Screen, Sheet, Dialog, Icon } from '../components/shell';
 import { Button, Card, cx, Meter, Pill, Segmented, SectionTitle } from '../components/kit';
 import { PlayerCard } from '../components/PlayerCard';
 import { Sparkline } from '../components/charts';
-import { ATTR_RU, dateShort, flag, money, playerAge, POS_FULL, seasonLabel, STATUS_RU, toi, TRAIT_RU } from '../format';
+import { ATTR_RU, dateShort, flag, money, moneyOf, playerAge, POS_FULL, rosterLabels, seasonLabel, statusLabel, toi, TRAIT_RU } from '../format';
+import { isGM, isNhlGM, LG_RU, lgOf, teamLg, userLg, userTeam } from '../../engine/leagues';
+import { KIND_RU } from '../../engine/intl';
 import { potRange, scoutReport, sendScout } from '../../engine/draft';
-import { buyoutCost, capSpace, extensionOf, marketValue } from '../../engine/contracts';
+import { buyoutCost, capSpace, extensionOf, marketValue, valueFor } from '../../engine/contracts';
 import { careerGoalie, careerSkater, gaa, statKey, svPct } from '../../engine/stats';
 import { interestIn, tradesOpen } from '../../engine/trades';
 import { buyoutPlayer, callUp, sendDown, signElc, waivePlayer } from '../actions';
@@ -26,7 +28,7 @@ export function PlayerScreen({ params }: { params: Record<string, unknown> }) {
   return (
     <Screen
       title={`${p.fn} ${p.ln}`}
-      subtitle={`${POS_FULL[p.pos]} · ${p.team ? L.teams[p.team]?.short : STATUS_RU[p.st]}`}
+      subtitle={`${POS_FULL[p.pos]} · ${p.team ? `${L.teams[p.team]?.short} · ${statusLabel(L, p)}` : statusLabel(L, p)}`}
       right={
         <button
           className="press w-11 h-11 rounded-full flex items-center justify-center"
@@ -76,15 +78,20 @@ function Actions({ L, p }: { L: League; p: Player }) {
   const nav = useNav();
   const [confirm, setConfirm] = useState<null | 'waive' | 'buyout'>(null);
   const [focus, setFocus] = useState(false);
-  const mine = p.team === L.user;
+  const gm = isGM(L);
+  const mine = gm && p.team === L.user;
+  const ulg = userLg(L);
+  const lb = rosterLabels(L, L.user);
   const btns: React.ReactNode[] = [];
   const expiring = p.c && p.c.last === L.season && !extensionOf(p);
-  if (mine) {
+  if (!gm) {
+    if (p.id === L.pro?.pid) btns.push(<Button key="focus" variant="primary" onClick={() => setFocus(true)}>Фокус тренировок</Button>);
+  } else if (mine) {
     if (p.st === 'NHL' || p.st === 'AHL') {
       if (expiring) btns.push(<Button key="ext" variant="primary" onClick={() => nav.push('negotiate', { id: p.id, kind: p.c?.exp === 'RFA' ? 'rfa' : 'extend' })}>Продлить</Button>);
-      if (tradesOpen(L)) btns.push(<Button key="tr" onClick={() => nav.go('market', 'trade', { give: { players: [p.id], picks: [] } })} icon={<Icon name="swap" size={16} />}>Обменять</Button>);
-      if (p.st === 'NHL') btns.push(<Button key="down" onClick={() => { if (sendDown(p) === 'needs-waivers') setConfirm('waive'); }}>В АХЛ</Button>);
-      if (p.st === 'AHL') btns.push(<Button key="up" onClick={() => callUp(p)}>В НХЛ</Button>);
+      if (tradesOpen(L, ulg)) btns.push(<Button key="tr" onClick={() => nav.go('market', 'trade', { give: { players: [p.id], picks: [] } })} icon={<Icon name="swap" size={16} />}>Обменять</Button>);
+      if (p.st === 'NHL') btns.push(<Button key="down" onClick={() => { if (sendDown(p) === 'needs-waivers') setConfirm('waive'); }}>В {lb.farm}</Button>);
+      if (p.st === 'AHL') btns.push(<Button key="up" onClick={() => callUp(p)}>В основу</Button>);
       if (p.c && p.c.type !== 'ELC') btns.push(<Button key="bo" variant="danger" onClick={() => setConfirm('buyout')}>Выкуп</Button>);
       if (p.pos !== 'G' && p.st === 'NHL' && L.teams[L.user].captain !== p.id) btns.push(<Button key="cap" onClick={() => { useGame.getState().act((L) => (L.teams[L.user].captain = p.id)); useGame.getState().toast(`${p.ln} — новый капитан`, 'good'); }}>Капитан ©</Button>);
       if (ageOn(p.bd, L.date) <= 26) btns.push(<Button key="focus" onClick={() => setFocus(true)}>Фокус развития</Button>);
@@ -93,15 +100,15 @@ function Actions({ L, p }: { L: League; p: Player }) {
     }
   } else if (!p.team && (p.st === 'FA') && L.phase !== 'playoffs') {
     btns.push(<Button key="fa" variant="primary" onClick={() => nav.push('negotiate', { id: p.id, kind: 'fa' })}>Предложить контракт</Button>);
-  } else if (p.team && tradesOpen(L) && p.st !== 'RET') {
+  } else if (p.team && teamLg(L, p.team) === ulg && tradesOpen(L, ulg) && p.st !== 'RET') {
     btns.push(<Button key="tr" variant="primary" onClick={() => nav.go('market', 'trade', { team: p.team, get: { players: [p.id], picks: [] } })} icon={<Icon name="swap" size={16} />}>Предложить обмен</Button>);
   }
-  if (!mine && (p.st === 'JR' || p.st === 'NCAA' || p.st === 'EUR' || p.dy)) {
+  if (isNhlGM(L) && !mine && (p.st === 'JR' || p.st === 'NCAA' || p.st === 'EUR' || p.dy)) {
     btns.push(<Button key="sc" onClick={() => { const ok = useGame.getState().act((L) => sendScout(L, p.id)); useGame.getState().toast(ok ? 'Скаут отправлен — отчёт уточнён' : 'Скауты заняты до следующей недели', ok ? 'good' : 'bad'); }}>Отправить скаута</Button>);
   }
   btns.push(<Button key="cmp" onClick={() => nav.push('compare', { a: p.id })}>Сравнить</Button>);
   const ut = L.teams[L.user];
-  if (p.st === 'RET' && p.teams.includes(L.user) && p.num != null && careerSkater(p).gp >= 400 && !ut.retired.some((r) => r[0] === p.num)) {
+  if (gm && ut && p.st === 'RET' && p.teams.includes(L.user) && p.num != null && careerSkater(p).gp >= 400 && !ut.retired.some((r) => r[0] === p.num)) {
     btns.push(<Button key="ret" variant="gold" onClick={() => { useGame.getState().act((L) => L.teams[L.user].retired.push([p.num!, `${p.fn} ${p.ln}`, L.season])); useGame.getState().toast(`Номер ${p.num} навсегда закреплён за ${p.ln}`, 'good'); }}>Вывести №{p.num} из обращения</Button>);
   }
   const bc = buyoutCost(L, p);
@@ -193,10 +200,13 @@ function Info({ L, p }: { L: League; p: Player }) {
           <Card className="flex justify-center"><Sparkline values={hist.map((h) => h[1])} labels={hist.map((h) => String(h[0]).slice(2))} width={300} height={70} /></Card>
         </>
       )}
-      {p.awards.length > 0 && (
+      {(p.awards.length > 0 || (p.intl ?? []).some((x) => x.split(':').length === 3)) && (
         <>
           <SectionTitle>Награды</SectionTitle>
-          <div className="flex flex-wrap gap-2">{p.awards.map((a) => { const [k, y] = a.split(':'); return <Pill key={a} color="#e8c26a">🏆 {AWARD_NAMES[k]?.split(' — ')[0]} {y}</Pill>; })}</div>
+          <div className="flex flex-wrap gap-2">
+            {(p.intl ?? []).filter((x) => x.split(':').length === 3).map((m) => { const [k, y, c] = m.split(':'); return <Pill key={m} color={c === 'gold' ? '#e8c26a' : c === 'silver' ? '#c9d4e4' : '#c08a5a'}>{c === 'gold' ? '🥇' : c === 'silver' ? '🥈' : '🥉'} {KIND_RU[k as 'wc' | 'og']}-{y}</Pill>; })}
+            {p.awards.map((a) => { const [k, y] = a.split(':'); return <Pill key={a} color="#e8c26a">🏆 {AWARD_NAMES[k]?.split(' — ')[0] ?? k} {y}</Pill>; })}
+          </div>
         </>
       )}
     </div>
@@ -211,26 +221,32 @@ function Stats({ L, p }: { L: League; p: Player }) {
     const season = `${String(s).slice(0, 4)}-${String(s).slice(6, 8)}`;
     rows.push({ season, team: String(h[1]), line: isG ? [h[2], h[3], Number(h[6]).toFixed(3).slice(1), h[7]] : [h[2], h[3], h[4], h[5], h[6]] });
   }
+  // In-game seasons: NHL, KHL, farm estimates (player careers) and national teams.
+  const label = (k: string) => (/rK$/.test(k) ? 'КХЛ' : /rF$/.test(k) ? 'фарм*' : /wc$/.test(k) ? 'ЧМ' : /og$/.test(k) ? 'ОИ' : 'НХЛ');
   for (const [k, v] of Object.entries(p.stats).sort()) {
-    if (!k.endsWith('r')) continue;
+    if (!/^\d{4}(r|rK|rF|wc|og)$/.test(k) || !v.gp) continue;
     const s = Number(k.slice(0, 4));
+    const intl = /wc|og/.test(k);
+    const team = intl ? label(k) : `${label(k)} ${k.endsWith('r') ? (p.teams.slice().reverse().find((t) => !L.teams[t]?.lg) ?? '') : ''}`.trim();
+    const season = intl ? String(s) : seasonLabel(s);
     if (isG) {
       const g = v as GoalieLine;
-      rows.push({ season: seasonLabel(s), team: p.teams[p.teams.length - 1] ?? '', line: [g.gp, g.w, svPct(g).toFixed(3).slice(1), gaa(g).toFixed(2)], mine: true });
+      rows.push({ season, team, line: [g.gp, g.w, svPct(g).toFixed(3).slice(1), gaa(g).toFixed(2)], mine: true });
     } else {
       const sk = v as SkaterLine;
-      rows.push({ season: seasonLabel(s), team: p.teams[p.teams.length - 1] ?? '', line: [sk.gp, sk.g, sk.a, sk.pts, sk.pm], mine: true });
+      rows.push({ season, team, line: [sk.gp, sk.g, sk.a, sk.pts, sk.pm], mine: true });
     }
   }
-  const cur = p.stats[statKey(L.season, false)];
-  const po = p.stats[statKey(L.season, true)];
+  const plg = teamLg(L, p.team) ?? 'NHL';
+  const cur = p.stats[statKey(L.season, false, plg)] ?? p.stats[statKey(L.season, false)];
+  const po = p.stats[statKey(L.season, true, plg)] ?? p.stats[statKey(L.season, true)];
   const car = isG ? careerGoalie(p) : careerSkater(p);
   const head = isG ? ['И', 'В', '%ОБ', 'КН'] : ['И', 'Г', 'П', 'О', '+/−'];
   return (
     <div>
       {cur && (
         <>
-          <SectionTitle>Сезон {seasonLabel(L.season)}</SectionTitle>
+          <SectionTitle>Сезон {seasonLabel(L.season)} · {LG_RU[plg]}</SectionTitle>
           <div className="grid grid-cols-4 gap-2">
             {isG ? (
               <>
@@ -255,7 +271,7 @@ function Stats({ L, p }: { L: League; p: Player }) {
         </>
       )}
       {po && <div className="text-[13px] text-muted mt-2 px-1">Плей-офф: {isG ? `${(po as GoalieLine).gp} И, ${(po as GoalieLine).w} В, ${svPct(po as GoalieLine).toFixed(3)}` : `${(po as SkaterLine).gp} И, ${(po as SkaterLine).g}+${(po as SkaterLine).a}=${(po as SkaterLine).pts}`}</div>}
-      <SectionTitle>Карьера в НХЛ</SectionTitle>
+      <SectionTitle>Карьера</SectionTitle>
       <Card pad={false} className="overflow-hidden">
         <table className="w-full text-[13.5px] tnum">
           <thead><tr className="text-muted text-[11.5px]"><th className="text-left font-medium px-3 py-2">Сезон</th><th className="text-left font-medium">Клуб</th>{head.map((h) => <th key={h} className="font-medium text-right pr-3">{h}</th>)}</tr></thead>
@@ -268,7 +284,7 @@ function Stats({ L, p }: { L: League; p: Player }) {
               </tr>
             ))}
             <tr className="border-t hairline font-semibold">
-              <td className="px-3 py-2" colSpan={2}>Всего</td>
+              <td className="px-3 py-2" colSpan={2}>Всего в НХЛ</td>
               {isG ? [car.gp, (car as { w: number }).w, '', ''].map((x, j) => <td key={j} className="text-right pr-3">{x}</td>) : [car.gp, (car as { g: number }).g, (car as { a: number }).a, (car as { pts: number }).pts, ''].map((x, j) => <td key={j} className="text-right pr-3">{x}</td>)}
             </tr>
           </tbody>
@@ -284,9 +300,12 @@ function MiniStat({ k, v }: { k: string; v: React.ReactNode }) {
 }
 
 function ContractTab({ L, p }: { L: League; p: Player }) {
-  const mv = marketValue(L, p);
+  const gm = isGM(L);
+  const ctxTeam = p.team ?? userTeam(L);
+  const mv = ctxTeam ? valueFor(L, p, ctxTeam) : marketValue(L, p);
+  const money = (n: number, d = 2) => moneyOf(L, ctxTeam, n, d);
   const ext = extensionOf(p);
-  const interest = p.team && p.team !== L.user ? [] : interestIn(L, p);
+  const interest = !gm || (p.team && p.team !== L.user) ? [] : interestIn(L, p);
   return (
     <div>
       <SectionTitle>Текущий контракт</SectionTitle>
@@ -311,8 +330,9 @@ function ContractTab({ L, p }: { L: League; p: Player }) {
           </div>
         </Card>
       ) : (
-        <Card><div className="text-muted text-[14px]">Без контракта{p.rightsUntil ? ` · права у ${p.team} до ${p.rightsUntil + 1}` : ''}.</div></Card>
+        <Card><div className="text-muted text-[14px]">Без контракта{p.rightsUntil && p.team ? ` · права у ${p.team} до ${p.rightsUntil + 1}` : ''}.</div></Card>
       )}
+      {p.rights && <Card className="mt-2"><div className="text-[13.5px] text-muted">Права в НХЛ: <b className="text-ink">{L.teams[p.rights]?.name}</b> до {(p.rightsUntil ?? L.season) + 1}. Игрок выступает в {LG_RU[lgOf(L.teams[p.team ?? ''])] ?? 'Европе'}; клуб НХЛ сможет подписать его после окончания контракта.</div></Card>}
       {ext && <Card className="mt-2"><div className="text-[13px] text-muted">Продление с {seasonLabel(ext.last - (ext.last - (p.c?.last ?? L.season)) + 1)}: <b className="text-ink">{money(ext.aav)}</b> до {seasonLabel(ext.last)}{ext.clause ? ` · ${ext.clause}` : ''}</div></Card>}
       <SectionTitle>Рыночная оценка</SectionTitle>
       <Card>
@@ -327,9 +347,9 @@ function ContractTab({ L, p }: { L: League; p: Player }) {
             </Pill>
           )}
         </div>
-        <div className="text-[12.5px] text-muted mt-2">Оценка по рейтингу, возрасту, позиции и потолку зарплат {seasonLabel(L.season)}. Свободно у вашего клуба: {money(capSpace(L, L.user))}.</div>
+        <div className="text-[12.5px] text-muted mt-2">Оценка по рейтингу, возрасту, позиции и потолку зарплат {seasonLabel(L.season)}{ctxTeam ? ` в ${LG_RU[teamLg(L, ctxTeam) ?? 'NHL']}` : ''}.{gm ? ` Свободно у вашего клуба: ${moneyOf(L, L.user, capSpace(L, L.user))}.` : ''}</div>
       </Card>
-      {p.team === L.user && interest.length > 0 && (
+      {gm && p.team === L.user && interest.length > 0 && (
         <>
           <SectionTitle>Интерес других клубов</SectionTitle>
           <Card pad={false}>

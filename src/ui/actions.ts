@@ -4,7 +4,8 @@ import { buyout, buyoutCost, capSpace, contractCount, signELC, waive } from '../
 import { autoLines, validateLines } from '../engine/lines';
 import type { League, Player } from '../engine/types';
 import { useGame } from '../store/game';
-import { money } from './format';
+import { money, rosterLabels } from './format';
+import { teamLg } from '../engine/leagues';
 
 const g = () => useGame.getState();
 
@@ -17,18 +18,21 @@ function refreshLines(L: League) {
 export function callUp(p: Player) {
   const L = g().L!;
   const healthy = Object.values(L.players).filter((x) => x.team === L.user && x.st === 'NHL' && !x.inj).length;
-  if (healthy >= 23) return g().toast('В основном составе уже 23 здоровых игрока. Сначала отправьте кого-то в АХЛ.', 'bad');
+  const lb = rosterLabels(L, L.user);
+  if (healthy >= 23) return g().toast(`В основном составе уже 23 здоровых игрока. Сначала отправьте кого-то в ${lb.farm}.`, 'bad');
   if (!p.c) return g().toast('У игрока нет контракта.', 'bad');
   g().act((L) => { p.st = 'NHL'; refreshLines(L); });
-  g().toast(`${p.ln} вызван в НХЛ`, 'good');
+  g().toast(`${p.ln} вызван в основной состав`, 'good');
 }
 
 export function sendDown(p: Player): 'needs-waivers' | 'done' {
   const L = g().L!;
-  if (p.c?.clause === 'NMC') { g().toast('У игрока NMC — отправить в АХЛ без его согласия нельзя.', 'bad'); return 'done'; }
-  if (needsWaivers(L, p)) return 'needs-waivers';
+  const lb = rosterLabels(L, L.user);
+  if (p.c?.clause === 'NMC') { g().toast(`У игрока NMC — отправить в ${lb.farm} без его согласия нельзя.`, 'bad'); return 'done'; }
+  // The KHL has no waiver draft.
+  if (teamLg(L, p.team) !== 'KHL' && needsWaivers(L, p)) return 'needs-waivers';
   g().act((L) => { p.st = 'AHL'; refreshLines(L); });
-  g().toast(`${p.ln} отправлен в АХЛ`, 'good');
+  g().toast(`${p.ln} отправлен в ${lb.farm}`, 'good');
   return 'done';
 }
 

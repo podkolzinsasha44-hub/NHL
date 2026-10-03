@@ -18,7 +18,7 @@ import { replenishPool, retirements, trainingCamp } from './progression';
 import { next } from './rng';
 import { sortedTeams } from './standings';
 import { statKey } from './stats';
-import type { League, Player, SkaterLine } from './types';
+import type { League, LeagueId, Player, SkaterLine } from './types';
 import { addDays, ageOn, clamp } from './util';
 import { buildSeasonGames, pickCaptain } from './world';
 import { updateStrategies } from './ai';
@@ -335,38 +335,41 @@ function camp(L: League) {
   L.stops.push('camp');
 }
 
-/** AI teams over the cap bury their worst contracts in the AHL. */
-export function aiCapCompliance(L: League, floor = true) {
+/** AI teams over the cap bury their worst contracts in the AHL (KHL: the farm club). */
+export function aiCapCompliance(L: League, floor = true, only?: LeagueId) {
   const hits = allCapHits(L);
   for (const t of Object.values(L.teams)) {
-    if (t.id === L.user) continue;
+    if (t.id === L.user || (only && lgOf(t) !== only)) continue;
     // Most clubs are fine: skip the expensive per-club work for them.
     const over = hits[t.id] > capFor(L, t.id);
     const under = floor && hits[t.id] < floorFor(L, t.id);
     if (!over && !under) continue;
+    const khl = lgOf(t) === 'KHL';
     let guard = 0;
-    while (capSpace(L, t.id) < 0 && guard++ < 6) {
+    // KHL farm contracts still count against the cap, so burying barely helps there.
+    while (!khl && capSpace(L, t.id) < 0 && guard++ < 6) {
       const cand = Object.values(L.players)
         .filter((p) => p.team === t.id && p.st === 'NHL' && p.c && p.c.clause !== 'NMC')
         .sort((a, b) => (a.ovr - b.ovr) * 1 - (a.c!.aav - b.c!.aav) / 1e6)[0];
       if (!cand) break;
       cand.st = 'AHL';
     }
-    // Still over: buy out the worst value contract
-    if (floor && capSpace(L, t.id) < 0) {
+    // Still over: buy out the worst value contract (KHL: terminate it, at any time of year)
+    let cut = 0;
+    while ((floor || khl) && capSpace(L, t.id) < 0 && cut++ < (khl ? 3 : 1)) {
       const worst = Object.values(L.players)
         .filter((p) => p.team === t.id && p.c && p.c.clause !== 'NMC' && p.c.type !== 'ELC' && p.id !== L.pro?.pid)
         .sort((a, b) => (b.c!.aav - valueFor(L, b, t.id)) - (a.c!.aav - valueFor(L, a, t.id)))[0];
-      if (worst) buyout(L, worst);
+      if (!worst) break;
+      buyout(L, worst);
     }
     // Under the floor: sign one-year deals until compliant
-    const khl = lgOf(t) === 'KHL';
     const fl = floorFor(L, t.id);
     let g2 = 0;
     if (floor && capHit(L, t.id) < fl) {
       const foreign = foreignCounts(L);
       const pool = freeAgents(L);
-      while (capHit(L, t.id) < fl && g2++ < 14) {
+      while (capHit(L, t.id) < fl && g2++ < 14 && contractCount(L, t.id) < 50) {
         const fa = pool.find((p) => !p.team && p.ovr >= (khl ? 60 : 64) && !signingBlock(L, p, t.id, foreign) && L.pro?.pid !== p.id);
         if (!fa) break;
         const aav = Math.max(minSalaryFor(L, t.id), roundSalary(Math.min(fl - capHit(L, t.id) + (khl ? 50_000 : 500_000), valueFor(L, fa, t.id) * 1.7), khl ? 'KHL' : 'NHL'));
@@ -374,6 +377,6 @@ export function aiCapCompliance(L: League, floor = true) {
         countSigning(foreign, fa, t.id);
       }
     }
-    if (floor || guard > 1) autoLines(L, t);
+    if (floor || guard > 1 || cut) autoLines(L, t);
   }
 }

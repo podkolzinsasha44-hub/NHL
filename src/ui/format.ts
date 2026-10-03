@@ -1,5 +1,6 @@
-import type { League, Player, Pos, Team } from '../engine/types';
+import type { League, LeagueId, Player, Pos, Team } from '../engine/types';
 import { ageOn } from '../engine/util';
+import { FARM_RU, LG_RU, RUB_PER_USD, teamLg, userDeadline, userLg, userPhase } from '../engine/leagues';
 
 export const POS_RU: Record<Pos, string> = { C: 'ЦН', L: 'ЛН', R: 'ПН', D: 'З', G: 'В' };
 export const POS_FULL: Record<Pos, string> = { C: 'Центральный нападающий', L: 'Левый нападающий', R: 'Правый нападающий', D: 'Защитник', G: 'Вратарь' };
@@ -35,12 +36,44 @@ const FLAGS: Record<string, string> = {
 };
 export const flag = (c: string) => FLAGS[c] ?? '🏳️';
 
-export function money(n: number, d = 2) {
+/** League whose currency is used by default (the user's league; set with the theme). */
+let moneyLg: LeagueId = 'NHL';
+export function setMoneyLeague(lg: LeagueId) {
+  moneyLg = lg;
+}
+
+/** Money: dollars in the NHL, roubles in the KHL (amounts are stored in dollars). */
+export function money(n: number, d = 2, lg: LeagueId = moneyLg) {
   const sign = n < 0 ? '−' : '';
+  if (lg === 'KHL') {
+    const r = Math.abs(n) * RUB_PER_USD;
+    if (r >= 1e9) return `${sign}₽${(r / 1e9).toFixed(2).replace('.', ',')} млрд`;
+    if (r >= 1e6) return `${sign}₽${(r / 1e6).toFixed(r >= 10e6 ? 0 : 1).replace('.', ',')} млн`;
+    if (r >= 1000) return `${sign}₽${Math.round(r / 1000)} тыс.`;
+    return `${sign}₽${Math.round(r)}`;
+  }
   const a = Math.abs(n);
   if (a >= 1_000_000) return `${sign}$${(a / 1_000_000).toFixed(a >= 10_000_000 ? 1 : d)}M`;
   if (a >= 1000) return `${sign}$${Math.round(a / 1000)}K`;
   return `${sign}$${a}`;
+}
+
+/** Money in the currency of a club's league. */
+export function moneyOf(L: League, team: string | null | undefined, n: number, d = 2) {
+  return money(n, d, teamLg(L, team) ?? moneyLg);
+}
+
+/** Player status with the right league names (KHL main roster / VHL farm). */
+export function statusLabel(L: League, p: Player) {
+  const lg = teamLg(L, p.team);
+  if (lg === 'KHL' && (p.st === 'NHL' || p.st === 'AHL')) return p.st === 'NHL' ? 'КХЛ' : 'ВХЛ';
+  return STATUS_RU[p.st] ?? p.st;
+}
+
+/** "Main roster" and "farm" labels for a club. */
+export function rosterLabels(L: League, team: string | null | undefined) {
+  const lg = teamLg(L, team) ?? 'NHL';
+  return { main: LG_RU[lg], farm: FARM_RU[lg] };
 }
 
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -91,10 +124,11 @@ export function tierOf(ovr: number): 'legend' | 'elite' | 'gold' | 'silver' | 'b
 export const TIER_RU = { legend: 'Легенда', elite: 'Элита', gold: 'Золото', silver: 'Серебро', bronze: 'Бронза' };
 
 export function phaseLabel(L: League) {
-  switch (L.phase) {
+  const khl = userLg(L) === 'KHL';
+  switch (userPhase(L)) {
     case 'preseason': return 'Предсезонка';
-    case 'regular': return L.date > L.deadline ? 'Регулярка · после дедлайна' : 'Регулярный сезон';
-    case 'playoffs': return 'Плей-офф';
+    case 'regular': return L.date > userDeadline(L) ? 'Регулярка · после дедлайна' : khl ? 'Регулярка КХЛ' : 'Регулярный сезон';
+    case 'playoffs': return khl ? 'Кубок Гагарина' : 'Плей-офф';
     case 'draft': return 'Драфт';
     case 'freeagency': return 'Свободные агенты';
     default: return 'Межсезонье';

@@ -16,6 +16,12 @@ export const AWARD_NAMES: Record<string, string> = {
   adams: 'Джек Адамс Эворд — тренер года',
   gm: 'GM года',
   cup: 'Кубок Стэнли',
+  potm: 'Игрок месяца',
+  'khl-cup': 'Кубок Гагарина',
+  'khl-mvp': 'MVP плей-офф КХЛ',
+  'khl-pts': 'Лучший бомбардир КХЛ',
+  'wc-mvp': 'MVP чемпионата мира',
+  'og-mvp': 'MVP Олимпиады',
 };
 
 export function isRookie(p: Player, season: number) {

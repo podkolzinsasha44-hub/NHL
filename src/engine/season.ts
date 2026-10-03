@@ -250,7 +250,10 @@ export function advanceDay(L: League): DayReport {
   }
 
   // KHL games run on their own calendar, whatever the NHL phase is.
+  const khlWas = L.khl?.phase;
   khlPhaseTick(L);
+  // KHL clubs open their season (early September, before NHL cuts) cap-compliant.
+  if (khlWas === 'preseason' && L.khl?.phase === 'regular') aiCapCompliance(L, true, 'KHL');
   const khlToday = khlGamesToday(L);
   if (khlToday.length) {
     const byTeam = groupByTeam(L);
@@ -289,7 +292,8 @@ export function advanceDay(L: League): DayReport {
       updateStrategies(L);
     }
     if (L.phase === 'regular' || L.phase === 'offseason' || L.phase === 'preseason') weeklyTradeActivity(L);
-    if (L.phase === 'regular') aiCapCompliance(L, false);
+    if (nhlRegular !== khlRegular) aiCapCompliance(L, false, nhlRegular ? 'NHL' : 'KHL');
+    else if (nhlRegular) aiCapCompliance(L, false);
   }
 
   offseasonDaily(L);

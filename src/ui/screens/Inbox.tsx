@@ -87,6 +87,7 @@ export function MessageView({ m, onClose }: { m: Message; onClose: () => void })
           const id = String(m.ref!.id);
           if (id === 'wrapped') nav.openModal('wrapped');
           else if (id === 'extensions') nav.go('market', 'market', { tab: 'ext' });
+          else if (id === 'pro-contract') nav.go('market');
           else nav.go('more', id);
         }}>Открыть</Button>
       )}

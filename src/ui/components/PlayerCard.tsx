@@ -2,7 +2,7 @@ import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { useState } from 'react';
 import type { League, Player } from '../../engine/types';
 import { potRange } from '../../engine/draft';
-import { ATTR_SHORT, flag, money, playerAge, POS_RU, tierOf, TRAIT_RU } from '../format';
+import { ATTR_SHORT, flag, moneyOf, playerAge, POS_RU, tierOf, TRAIT_RU } from '../format';
 import { cx } from './kit';
 import { Silhouette, TeamLogo } from './media';
 
@@ -104,7 +104,7 @@ export function PlayerCard({ p, L, width = 260, interactive = true }: { p: Playe
           <div className="absolute left-0 right-0 bottom-3 flex items-center justify-center gap-2 text-[11.5px] text-white/70 px-3">
             <span>{age} лет</span>
             <span className="opacity-40">·</span>
-            <span>{p.c ? `${money(p.c.aav)} до ${p.c.last + 1}` : 'без контракта'}</span>
+            <span>{p.c ? `${moneyOf(L, p.team, p.c.aav)} до ${p.c.last + 1}` : 'без контракта'}</span>
             <span className="opacity-40">·</span>
             <span>POT {lo === hi ? lo : `${lo}–${hi}`}</span>
           </div>

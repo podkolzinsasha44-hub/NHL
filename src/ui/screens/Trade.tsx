@@ -9,6 +9,7 @@ import { PlayerRow } from '../components/rows';
 import { PlayerPhoto, TeamLogo } from '../components/media';
 import { askPrice, checkTrade, evaluateForAI, executeTrade, pickLabel, projectedSlot, tradesOpen, type AIResponse } from '../../engine/trades';
 import { capSpace } from '../../engine/contracts';
+import { leagueTeams, userLg } from '../../engine/leagues';
 import { money, POS_RU } from '../format';
 import { Term } from '../components/Term';
 
@@ -57,7 +58,8 @@ export function TradeScreen({ params }: { params: Record<string, unknown> }) {
     setResp({ accept: false, mood: 0, message: 'Вот что мы хотим взамен.' });
   };
 
-  if (!tradesOpen(L)) {
+  const lg = userLg(L);
+  if (!tradesOpen(L, lg)) {
     return <Screen title="Обмен"><Card className="mt-4">Окно обменов сейчас закрыто.</Card></Screen>;
   }
 
@@ -74,7 +76,7 @@ export function TradeScreen({ params }: { params: Record<string, unknown> }) {
         <Icon name="swap" className="text-muted" />
       </button>
 
-      <AssetBox L={L} title="Вы отдаёте" team={L.user} a={give} setA={setGive} onAdd={() => setPicker('give')} retainable />
+      <AssetBox L={L} title="Вы отдаёте" team={L.user} a={give} setA={setGive} onAdd={() => setPicker('give')} retainable={lg === 'NHL'} />
       <div className="flex justify-center -my-1 relative z-10"><div className="w-10 h-10 rounded-full glass-strong flex items-center justify-center"><Icon name="swap" size={18} className="rotate-90" /></div></div>
       <AssetBox L={L} title={t ? `${t.short} отдают` : 'Вы получаете'} team={partner} a={get} setA={setGet} onAdd={() => partner && setPicker('get')} />
 
@@ -120,10 +122,10 @@ export function TradeScreen({ params }: { params: Record<string, unknown> }) {
       {/* Pickers */}
       <Sheet open={picker === 'team'} onClose={() => setPicker(null)} title="Клуб-партнёр" full>
         <div className="grid grid-cols-4 gap-2">
-          {Object.values(L.teams).filter((x) => x.id !== L.user).sort((a, b) => a.id.localeCompare(b.id)).map((x) => (
+          {leagueTeams(L, lg).filter((x) => x.id !== L.user).sort((a, b) => a.id.localeCompare(b.id)).map((x) => (
             <button key={x.id} onClick={() => { setPartner(x.id); setGet(empty()); setResp(null); setPicker(null); }} className={cx('press glass rounded-2xl p-2 flex flex-col items-center gap-1', partner === x.id && 'border-[var(--accent)]')}>
               <TeamLogo id={x.id} size={38} />
-              <div className="text-[11px] font-display">{x.id}</div>
+              <div className="text-[11px] font-display truncate max-w-full">{lg === 'KHL' ? x.short : x.id}</div>
             </button>
           ))}
         </div>
@@ -181,13 +183,14 @@ function AssetBox({ L, title, team, a, setA, onAdd, retainable }: { L: League; t
 
 function AssetPicker({ L, open, team, a, setA, onClose }: { L: League; open: boolean; team: string; a: TradeAsset; setA: (a: TradeAsset) => void; onClose: () => void }) {
   const [tab, setTab] = useState<'nhl' | 'ahl' | 'rights' | 'picks'>('nhl');
+  const khl = L.teams[team]?.lg === 'KHL';
   const players = Object.values(L.players).filter((p) => p.team === team && p.st !== 'RET' && (tab === 'nhl' ? p.st === 'NHL' : tab === 'ahl' ? p.st === 'AHL' : p.st !== 'NHL' && p.st !== 'AHL')).sort((x, y) => y.ovr - x.ovr);
   const picks = L.picks.filter((p) => p.owner === team && !p.used).sort((x, y) => x.season - y.season || x.round - y.round);
   const toggleP = (id: number) => setA({ ...a, players: a.players.includes(id) ? a.players.filter((x) => x !== id) : [...a.players, id] });
   const toggleK = (id: string) => setA({ ...a, picks: a.picks.includes(id) ? a.picks.filter((x) => x !== id) : [...a.picks, id] });
   return (
     <Sheet open={open} onClose={onClose} title={L.teams[team].name} full>
-      <Chips value={tab} onChange={setTab} options={[{ v: 'nhl', label: 'НХЛ' }, { v: 'ahl', label: 'АХЛ' }, { v: 'rights', label: 'Права' }, { v: 'picks', label: 'Пики' }]} />
+      <Chips value={tab} onChange={setTab} options={khl ? [{ v: 'nhl', label: 'Основа' }, { v: 'ahl', label: 'ВХЛ' }] : [{ v: 'nhl', label: 'НХЛ' }, { v: 'ahl', label: 'АХЛ' }, { v: 'rights', label: 'Права' }, { v: 'picks', label: 'Пики' }]} />
       <div className="mt-3 flex flex-col gap-1">
         {tab !== 'picks' && players.map((p) => {
           const on = a.players.includes(p.id);

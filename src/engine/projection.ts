@@ -24,9 +24,9 @@ export function winProb(pH: number, pA: number, playoff = false) {
   return 1 / (1 + Math.exp(-PROJ.K * (playoff ? PROJ.PO : 1) * (pH - pA + PROJ.HOME)));
 }
 
-export function gameWinProb(L: League, home: string, away: string) {
+export function gameWinProb(L: League, home: string, away: string, playoff = L.phase === 'playoffs') {
   const P = powers(L);
-  return winProb(P[home], P[away], L.phase === 'playoffs');
+  return winProb(P[home], P[away], playoff);
 }
 
 function seriesProb(pw: Record<string, number>, hi: string, lo: string, wHi = 0, wLo = 0, sims = 0): boolean {
@@ -136,4 +136,66 @@ export function seasonOdds(L: League, n = 400): Record<string, Odds> {
 /** Cup odds for the user team if lines/roster were as given (used for trade impact preview). */
 export function cupOddsFor(L: League, team: string, n = 300) {
   return seasonOdds(L, n)[team]?.cup ?? 0;
+}
+
+/**
+ * KHL odds: the rest of the regular season, conference playoffs in round 1 (1–8, 2–7...), then
+ * re-seeding by the overall table at every stage — the 2026-27 format. Same win model as the NHL.
+ */
+export function khlSeasonOdds(L: League, n = 250): Record<string, Odds> {
+  rngState = ((Date.parse(L.date) / 86400000) | 0) + 7 || 99;
+  const pw = powers(L);
+  const teams = leagueTeams(L, 'KHL');
+  const res: Record<string, Odds> = {};
+  for (const t of teams) res[t.id] = { po: 0, cup: 0, pts: 0, final: 0 };
+  const K = L.khl;
+  if (!K || !teams.length) return res;
+  const remaining = K.phase === 'regular' || K.phase === 'preseason' ? L.games.filter((g) => g.lg === 'KHL' && !g.played && !g.series) : [];
+  const po = K.phase === 'playoffs' ? K.playoffs : null;
+  const series = (hi: string, lo: string, wHi = 0, wLo = 0) => (seriesProb(pw, hi, lo, wHi, wLo) ? hi : lo);
+  for (let s = 0; s < n; s++) {
+    const pts: Record<string, number> = {};
+    for (const t of teams) pts[t.id] = K.phase === 'preseason' ? 0 : t.rec.pts;
+    for (const g of remaining) {
+      const p = winProb(pw[g.h], pw[g.a]);
+      const ot = r() < PROJ.OT;
+      if (r() < p) { pts[g.h] += 2; if (ot) pts[g.a] += 1; } else { pts[g.a] += 2; if (ot) pts[g.h] += 1; }
+    }
+    const order = (ids: string[]) => [...ids].sort((a, b) => pts[b] - pts[a]);
+    let alive: string[];
+    let round: number;
+    if (po) {
+      for (const x of po.series.filter((q) => q.round === 1)) { res[x.hi].po++; res[x.lo].po++; }
+      round = po.round;
+      alive = po.series.filter((q) => q.round === round).map((q) => q.winner ?? series(q.hi, q.lo, q.wHi, q.wLo));
+    } else {
+      for (const t of teams) res[t.id].pts += pts[t.id];
+      alive = [];
+      for (const conf of ['W', 'E'] as const) {
+        const seeds = order(teams.filter((t) => t.conf === conf).map((t) => t.id)).slice(0, 8);
+        for (const x of seeds) res[x].po++;
+        for (let i = 0; i < 4; i++) alive.push(series(seeds[i], seeds[7 - i]));
+      }
+      round = 1;
+    }
+    while (alive.length > 1) {
+      round++;
+      const o = order(alive);
+      if (o.length === 2) for (const w of o) res[w].final++;
+      const nextW: string[] = [];
+      for (let i = 0; i < o.length / 2; i++) nextW.push(series(o[i], o[o.length - 1 - i]));
+      alive = nextW;
+    }
+    if (alive[0]) res[alive[0]].cup++;
+  }
+  for (const id in res) {
+    res[id].po /= n; res[id].cup /= n; res[id].final /= n;
+    res[id].pts = po ? L.teams[id].rec.pts : res[id].pts / n;
+  }
+  return res;
+}
+
+/** Odds for the league of a team. */
+export function oddsFor(L: League, team: string, n = 250) {
+  return L.teams[team]?.lg === 'KHL' ? khlSeasonOdds(L, n) : seasonOdds(L, n);
 }

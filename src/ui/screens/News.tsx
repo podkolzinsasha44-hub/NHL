@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { userTeam } from '../../engine/leagues';
 import { useL } from '../../store/game';
 import { useNav } from '../../store/nav';
 import type { News } from '../../engine/types';
@@ -55,7 +56,7 @@ export function NewsItem({ n }: { n: News }) {
 export function NewsScreen() {
   const L = useL();
   const [f, setF] = useState<'all' | 'mine' | 'social' | 'trade' | 'sign'>('all');
-  const list = L.news.filter((n) => (f === 'all' ? true : f === 'mine' ? n.team === L.user : f === 'trade' ? n.kind === 'trade' : f === 'sign' ? n.kind === 'sign' || n.kind === 'fa' : n.kind === 'social'));
+  const list = L.news.filter((n) => (f === 'all' ? true : f === 'mine' ? n.team === userTeam(L) || (!!L.pro && !!n.players?.includes(L.pro.pid)) : f === 'trade' ? n.kind === 'trade' : f === 'sign' ? n.kind === 'sign' || n.kind === 'fa' : n.kind === 'social'));
   return (
     <Screen title="Лента" subtitle="Новости лиги и соцсети">
       <Chips value={f} onChange={setF} options={[{ v: 'all', label: 'Всё' }, { v: 'mine', label: 'Мой клуб' }, { v: 'social', label: 'Соцсети' }, { v: 'trade', label: 'Обмены' }, { v: 'sign', label: 'Контракты' }]} />

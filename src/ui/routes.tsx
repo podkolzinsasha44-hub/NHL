@@ -13,16 +13,29 @@ import { MoreScreen } from './screens/More';
 import { DraftRoom, DraftScreen, LotteryModal } from './screens/Draft';
 import { FinanceScreen, StaffScreen, TeamScreen } from './screens/Club';
 import { AchievementsScreen, AlbumScreen, CareerScreen, CelebrationModal, CompareScreen, GlossaryScreen, HistoryScreen, SearchScreen, SettingsScreen, WatchScreen, WrappedModal } from './screens/Extras';
+import { ProCareerScreen, ProContract, ProHome, ProTeam } from './screens/Pro';
+import { IntlScreen } from './screens/Intl';
+import { useGame } from '../store/game';
 
 type RouteComp = ComponentType<{ params: Record<string, unknown> }>;
 
+/** Tab roots differ between a GM career and a player career. */
+function byMode(gm: RouteComp, pro: ComponentType): RouteComp {
+  return function ModeRoute(props) {
+    const player = useGame((s) => s.L?.mode === 'player');
+    const Pro = pro;
+    const Gm = gm;
+    return player ? <Pro /> : <Gm {...props} />;
+  };
+}
+
 export const ROUTES: Record<string, RouteComp> = {
-  office: Office,
+  office: byMode(Office, ProHome),
   inbox: InboxScreen,
   news: NewsScreen,
-  roster: Roster,
+  roster: byMode(Roster, ProTeam),
   player: PlayerScreen,
-  market: Market,
+  market: byMode(Market, ProContract),
   trade: TradeScreen,
   negotiate: NegotiateScreen,
   league: LeagueScreen,
@@ -33,7 +46,8 @@ export const ROUTES: Record<string, RouteComp> = {
   finance: FinanceScreen,
   staff: StaffScreen,
   team: TeamScreen,
-  career: CareerScreen,
+  career: byMode(CareerScreen, ProCareerScreen),
+  intl: IntlScreen,
   history: HistoryScreen,
   achievements: AchievementsScreen,
   album: AlbumScreen,

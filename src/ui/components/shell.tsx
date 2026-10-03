@@ -97,19 +97,23 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'more', label: 'Ещё', icon: 'more' },
 ];
 
+/** Player careers rename the tabs: the club is run by others. */
+const PRO_LABELS: Partial<Record<Tab, string>> = { office: 'Карьера', roster: 'Команда', market: 'Контракт' };
+
 export function TabBar({ badges }: { badges: Partial<Record<Tab, number>> }) {
   const tab = useNav((s) => s.tab);
   const setTab = useNav((s) => s.setTab);
+  const pro = useGame((s) => s.L?.mode === 'player');
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 glass-strong border-x-0 border-b-0 pb-safe">
       <div className="flex h-[56px] max-w-[560px] mx-auto">
         {TABS.map((t) => {
           const active = t.id === tab;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)} className="press relative flex-1 flex flex-col items-center justify-center gap-0.5" aria-label={t.label}>
+            <button key={t.id} onClick={() => setTab(t.id)} className="press relative flex-1 flex flex-col items-center justify-center gap-0.5" aria-label={(pro && PRO_LABELS[t.id]) || t.label}>
               {active && <motion.div layoutId="tab-glow" className="absolute top-0 w-10 h-[3px] rounded-b-full accent-bg" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
               <Icon name={t.icon} size={24} className={active ? 'accent-text' : 'text-muted'} />
-              <span className={cx('text-[10.5px] font-medium', active ? 'text-ink' : 'text-muted')}>{t.label}</span>
+              <span className={cx('text-[10.5px] font-medium', active ? 'text-ink' : 'text-muted')}>{(pro && PRO_LABELS[t.id]) || t.label}</span>
               {!!badges[t.id] && (
                 <span className="absolute top-1.5 left-1/2 ml-2.5 min-w-[17px] h-[17px] px-1 rounded-full bg-bad text-white text-[10.5px] font-semibold flex items-center justify-center">{badges[t.id]}</span>
               )}

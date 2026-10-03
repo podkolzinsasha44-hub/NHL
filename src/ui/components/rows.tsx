@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { League, Player, Team } from '../../engine/types';
-import { flag, money, playerAge, POS_RU, recordStr, STATUS_RU } from '../format';
+import { flag, moneyOf, playerAge, POS_RU, recordStr, statusLabel } from '../format';
 import { useNav } from '../../store/nav';
 import { Chevron, cx, Ovr } from './kit';
 import { PlayerPhoto, TeamLogo } from './media';
@@ -27,8 +27,8 @@ export function PlayerRow({
           {sub ?? (
             <>
               {POS_RU[p.pos]} · {playerAge(L, p)} лет · {flag(p.ctry)}
-              {showTeam && ` · ${p.team ?? STATUS_RU[p.st]}`}
-              {p.c ? ` · ${money(p.c.aav)}×${Math.max(0, p.c.last - L.season + 1)}` : ''}
+              {showTeam && ` · ${p.team ? L.teams[p.team]?.short ?? p.team : statusLabel(L, p)}`}
+              {p.c ? ` · ${moneyOf(L, p.team, p.c.aav)}×${Math.max(0, p.c.last - L.season + 1)}` : ''}
             </>
           )}
         </div>

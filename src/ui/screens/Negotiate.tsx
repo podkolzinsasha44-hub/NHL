@@ -6,11 +6,11 @@ import type { Negotiation } from '../../engine/types';
 import { Screen } from '../components/shell';
 import { Button, Card, cx, Meter, Ovr, Pill, Segmented } from '../components/kit';
 import { PlayerPhoto } from '../components/media';
-import { capSpace, makeOffer, marketValue, maxTerm, startNegotiation, type OfferResult } from '../../engine/contracts';
-import { userFAOffer } from '../../engine/fa';
+import { capFor, capSpace, makeOffer, maxTerm, minSalaryFor, startNegotiation, valueFor, type OfferResult } from '../../engine/contracts';
+import { signingBlock, userFAOffer } from '../../engine/fa';
+import { teamLg } from '../../engine/leagues';
 import { money, playerAge, POS_FULL } from '../format';
 import { Term } from '../components/Term';
-import { capOf, minSalaryOf } from '../../engine/util';
 
 export function NegotiateScreen({ params }: { params: Record<string, unknown> }) {
   const L = useL();
@@ -28,9 +28,12 @@ export function NegotiateScreen({ params }: { params: Record<string, unknown> })
   ]);
   const [status, setStatus] = useState<'open' | 'signed' | 'broken'>(n.status);
   if (!p) return <Screen title="Переговоры"><div /></Screen>;
-  const mv = marketValue(L, p, kind === 'fa' ? L.season : L.season + 1);
-  const min = minSalaryOf(L);
-  const max = Math.round(capOf(L) * 0.2);
+  const mv = valueFor(L, p, L.user, kind === 'fa' ? L.season : L.season + 1);
+  const min = minSalaryFor(L, L.user);
+  const max = Math.round(capFor(L, L.user) * 0.2);
+  const khl = teamLg(L, L.user) === 'KHL';
+  const step = khl ? 1000 : 25_000;
+  const block = kind === 'fa' ? signingBlock(L, p, L.user) : null;
   const blocked = p.talksBlockedUntil && p.talksBlockedUntil > L.date;
   const offers = L.fa?.offers[p.id]?.filter((o) => o.team !== L.user).length ?? 0;
   const greedTxt = p.pers.greed >= 15 ? 'Жёсткий агент' : p.pers.greed <= 6 ? 'Сговорчивый агент' : 'Деловой агент';
@@ -71,6 +74,7 @@ export function NegotiateScreen({ params }: { params: Record<string, unknown> })
         <div className="glass rounded-2xl px-3 py-2"><div className="text-[10.5px] uppercase text-muted">Ваш кэп</div><div className="num text-[17px]">{money(capSpace(L, L.user))}</div></div>
       </div>
       {kind === 'fa' && offers > 0 && <div className="text-[13px] text-warn mt-2 px-1">⚡ Есть предложения от {offers} клуб(ов). Агент выберет лучшее.</div>}
+      {block && <div className="text-[13px] text-bad mt-2 px-1">{block}</div>}
 
       {/* Chat */}
       <div className="flex flex-col gap-2 mt-4">
@@ -94,7 +98,7 @@ export function NegotiateScreen({ params }: { params: Record<string, unknown> })
             <div className="text-[11px] uppercase tracking-wider text-muted">Зарплата в год (<Term k="aav">AAV</Term>)</div>
             <div className="num text-[26px]">{money(aav)}</div>
           </div>
-          <input type="range" min={min} max={max} step={25_000} value={aav} onChange={(e) => setAav(Number(e.target.value))} className="w-full mt-2 accent-[var(--accent)] h-8" />
+          <input type="range" min={min} max={max} step={step} value={aav} onChange={(e) => setAav(Number(e.target.value))} className="w-full mt-2 accent-[var(--accent)] h-8" />
           <div className="flex justify-between text-[11px] text-faint -mt-1"><span>{money(min)}</span><span>{money(max)}</span></div>
           <div className="flex items-center justify-between mt-3">
             <div className="text-[11px] uppercase tracking-wider text-muted">Срок</div>
@@ -104,9 +108,13 @@ export function NegotiateScreen({ params }: { params: Record<string, unknown> })
               <button className="press w-10 h-10 rounded-xl glass text-[20px]" onClick={() => setYears(Math.min(maxTerm(own), years + 1))}>+</button>
             </div>
           </div>
-          <div className="text-[11px] uppercase tracking-wider text-muted mt-3 mb-1.5">Пункты</div>
-          <Segmented value={clause} onChange={setClause} options={[{ v: 'none', label: 'Нет' }, { v: 'NTC', label: 'NTC' }, { v: 'NMC', label: 'NMC' }]} />
-          <div className="text-[11.5px] text-muted mt-1.5"><Term k="ntc">NTC</Term> и <Term k="nmc">NMC</Term> ценятся игроком, но ограничат вас в будущем.</div>
+          {!khl && (
+            <>
+              <div className="text-[11px] uppercase tracking-wider text-muted mt-3 mb-1.5">Пункты</div>
+              <Segmented value={clause} onChange={setClause} options={[{ v: 'none', label: 'Нет' }, { v: 'NTC', label: 'NTC' }, { v: 'NMC', label: 'NMC' }]} />
+              <div className="text-[11.5px] text-muted mt-1.5"><Term k="ntc">NTC</Term> и <Term k="nmc">NMC</Term> ценятся игроком, но ограничат вас в будущем.</div>
+            </>
+          )}
           <div className="mt-4">
             <div className="flex justify-between text-[11px] text-muted mb-1"><span>Терпение агента</span><span>{Math.max(0, Math.round(cur.patience))}</span></div>
             <Meter value={Math.max(0, cur.patience)} color={cur.patience < 30 ? '#ff5a5f' : cur.patience < 60 ? '#ffb547' : '#3ddc97'} />
