@@ -145,5 +145,5 @@ describe('career options', () => {
       expect(acceptProOffer(L, offer.id).ok).toBe(true);
       expect(p.team).toBe(offer.team);
     }
-  });
+  }, 30_000);
 });

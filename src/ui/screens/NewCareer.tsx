@@ -255,9 +255,9 @@ export function NewCareer({ onBack }: { onBack: () => void }) {
                 {kind !== 'pro' && difficulty === 'real' && `Как в настоящей ${kind === 'khl' ? 'КХЛ' : 'НХЛ'}: жёсткие переговоры, требовательный владелец. Рекомендуем.`}
                 {kind !== 'pro' && difficulty === 'hard' && 'ИИ помнит обиды и торгуется жёстко, владелец нетерпелив. Шансы в матчах — те же.'}
               </div>
-              <div className="text-[12px] uppercase tracking-wider text-muted px-1 mt-5 mb-1.5">Размер мира</div>
-              <Segmented value={size} onChange={setSize} options={[{ v: 'compact', label: '~2 500' }, { v: 'standard', label: '~4 500' }, { v: 'huge', label: '~8 000' }]} />
-              <div className="text-[12.5px] text-muted mt-2 px-1">1 700 реальных игроков НХЛ, 22 клуба КХЛ и вымышленные игроки SHL, Liiga, NL, ВХЛ, NCAA и драфт-классов. Больше игроков — шире выбор, но чуть дольше межсезонье.</div>
+              <div className="text-[12px] uppercase tracking-wider text-muted px-1 mt-5 mb-1.5">Новые игроки каждый год</div>
+              <Segmented value={size} onChange={setSize} options={[{ v: 'compact', label: 'Мало' }, { v: 'standard', label: 'Норма' }, { v: 'huge', label: 'Много' }]} />
+              <div className="text-[12.5px] text-muted mt-2 px-1">На старте все 4 300 хоккеистов реальные: НХЛ и её фарм, составы КХЛ, Европа, NCAA и юниорские лиги, сборные. С годами в мир приходят новые молодые игроки (~30 / ~220 / ~600 в год) и драфт-классы — их ещё нет в реальности, поэтому они вымышленные.</div>
               {kind !== 'pro' && (
                 <Toggle on={noFiring} set={setNoFiring} icon="🤝" title="Без увольнения" sub="Владелец может быть недоволен, но уволить вас не сможет" />
               )}

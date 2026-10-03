@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "calibrate": "tsx scripts/calibrate.ts",
-    "data:fetch": "node scripts/fetch-nhl.mjs",
+    "data:fetch": "node scripts/fetch-nhl.mjs && node scripts/fetch-khl.mjs && node scripts/fetch-intl.mjs",
     "data:build": "node scripts/build-world.mjs",
     "deploy": "npm run build && npx firebase-tools deploy --only hosting",
     "smoke": "tsx scripts/smoke.ts"

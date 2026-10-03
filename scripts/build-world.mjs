@@ -11,7 +11,7 @@ const SEASON_W = { 20232024: 0.2, 20242025: 0.3, 20252026: 0.5 };
 const CAP = 104_000_000;
 const MIN_SALARY = 850_000;
 const MAX_SALARY = 20_800_000;
-const SNAPSHOT = '2026-10-02';
+const SNAPSHOT = '2026-10-03';
 const REF_DATE = new Date('2026-10-01');
 
 const read = (p) => JSON.parse(fs.readFileSync(path.join(RAW, p), 'utf8'));
@@ -169,7 +169,7 @@ const statusFromLeague = (lg) => {
 };
 
 function clubSeasons(d) {
-  return (d.seasonTotals || []).filter((s) => s.gameTypeId === 2 && !TOURNAMENTS.has(s.leagueAbbrev));
+  return (d.seasonTotals || []).filter((s) => s.gameTypeId === 2 && !TOURNAMENTS.has(s.leagueAbbrev) && !/^(WC|WJC|U18|U17|OG|Olympics)\b/.test(s.leagueAbbrev));
 }
 
 // ---------- Skater metrics ----------
@@ -372,7 +372,7 @@ function calcOvrFrom(pos, a) {
   return Math.round(v);
 }
 
-function skaterAttrs(id, pos, ovr, m, ed, rnd, weightKg, age) {
+function skaterAttrs(id, pos, ovr, m, ed, rnd, weightKg, age, dev = null) {
   const g = pos === 'D' ? 'D' : 'F';
   const z = Z[g];
   const n = (s) => (rnd() - 0.5) * s;
@@ -381,7 +381,10 @@ function skaterAttrs(id, pos, ovr, m, ed, rnd, weightKg, age) {
   const burstPct = ed?.skatingSpeed?.burstsOver20?.percentile;
   const shotPct = ed?.topShotSpeed?.percentile;
   d.sk = speedPct != null ? ((speedPct + (burstPct ?? speedPct)) / 2 - 0.5) * 18 : (25 - age) * 0.6 + n(6);
-  if (m) {
+  if (dev) {
+    // Skill shape from another league's stats (KHL), already in rating points.
+    Object.assign(d, dev);
+  } else if (m) {
     const c = (x) => clamp(x, -2.5, 2.5);
     d.sh = c(z.g60(m.g60)) * 3.2 + c(z.shPct(m.shPct)) * 1.6 + (shotPct != null ? (shotPct - 0.5) * 6 : 0);
     d.pa = c(z.a60(m.a60)) * 3.6 + c(z.ppToi(m.ppToi)) * 1.2;
@@ -397,7 +400,7 @@ function skaterAttrs(id, pos, ovr, m, ed, rnd, weightKg, age) {
     d.dc = n(8);
     d.du = n(10);
   }
-  if (pos === 'C') d.fo = m?.fo != null ? clamp(foZ(m.fo), -2.5, 2.5) * 6 + 4 : n(8);
+  if (pos === 'C') d.fo = dev?.fo ?? (m?.fo != null ? clamp(foZ(m.fo), -2.5, 2.5) * 6 + 4 : n(8));
   else d.fo = -14 + n(10);
   // Position flavour
   if (g === 'D') { d.di += 4; d.sh -= 4; d.ph += 2; }
@@ -538,9 +541,78 @@ function hist(id, isG) {
   return out;
 }
 
+// ---------- KHL: real rosters from the league's public API (scripts/fetch-khl.mjs) ----------
+const KHL_TEAM = { 30: 'MMG', 26: 'LOK', 36: 'NFT', 16: 'CSK', 40: 'AKB', 44: 'SKA', 22: 'TRP', 32: 'SYU', 56: 'AVT', 46: 'BAR', 315: 'SHA', 8: 'DMS', 18: 'SPR', 10: 'AVG', 38: 'DMN', 42: 'SEV', 28: 'TRK', 12: 'AMR', 61: 'ADM', 24: 'SIB', 105: 'LAD', 113: 'SCH' };
+const KHL_SEASON_W = { 20242025: 0.3, 20252026: 0.55, 20262027: 0.15 };
+const KHL_CTRY = {
+  Russia: 'RUS', Canada: 'CAN', Belarus: 'BLR', USA: 'USA', Kazakhstan: 'KAZ', Slovakia: 'SVK', Sweden: 'SWE', Netherlands: 'NLD',
+  China: 'CHN', Norway: 'NOR', Czechia: 'CZE', 'Czech Republic': 'CZE', Finland: 'FIN', Latvia: 'LVA', Switzerland: 'CHE', Germany: 'DEU',
+  Austria: 'AUT', Denmark: 'DNK', Slovenia: 'SVN', Ukraine: 'UKR', France: 'FRA', Italy: 'ITA', Uzbekistan: 'UZB', Kyrgyzstan: 'KGZ', Armenia: 'ARM',
+};
+// League-wide rating quantiles (0, 5 … 100 %) the KHL scoring corridors are calibrated on;
+// real players fill them in the order of their real performance.
+const KHL_Q = {
+  F: [51, 57, 58, 59, 61, 62, 64, 66, 68, 68, 69, 70, 71, 72, 73, 73, 74, 75, 77, 79, 83],
+  D: [50, 55, 57, 58, 59, 60, 61, 63, 68, 69, 70, 70, 71, 71, 72, 72, 73, 73, 74, 75, 78],
+  G: [48, 53, 54, 55, 55, 57, 58, 59, 60, 62, 64, 67, 68, 69, 70, 72, 75, 77, 77, 78, 80],
+};
+const KHL_ID_BASE = 7_000_000; // KHL-only players: id = base + KHL id (NHL ids are 8 4xx xxx)
+
+const khlOn = fs.existsSync(path.join(RAW, 'khl/rosters.json'));
+const khlStats = {}; // season -> webcaster id -> { gp, g, a, ... }
+const khlDetail = {}; // webcaster id -> latest player card
+const khlRoster = []; // current rosters
+if (khlOn) {
+  for (const season of Object.keys(KHL_SEASON_W).map(Number)) {
+    const list = readOpt(`khl/players-${season}.json`) ?? [];
+    khlStats[season] = {};
+    for (const p of list) {
+      khlStats[season][p.id] = Object.fromEntries(p.stats.map((x) => [x.id, x.val]));
+      khlDetail[p.id] = p; // later seasons overwrite: the freshest card wins
+    }
+  }
+  for (const { player: r } of read('khl/rosters.json')) {
+    const team = KHL_TEAM[r.team?.id];
+    if (!team || !r.khl_id) continue;
+    khlRoster.push({ ...r, ...(khlDetail[r.id] ?? {}), team });
+  }
+}
+
+const RU_LAT = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
+const latin = (w) => [...w].map((ch) => { const l = RU_LAT[ch.toLowerCase()]; return l == null ? ch : ch === ch.toLowerCase() ? l : l.charAt(0).toUpperCase() + l.slice(1); }).join('');
+/** "Da Costa Stephane" / "Abramov Mikhail B." → { fn, ln } (the KHL lists the surname first). */
+function khlName(name) {
+  const t = latin(name).trim().split(/\s+/).filter((x) => !/^[A-Z]\.$/.test(x));
+  return t.length < 2 ? { fn: t[0] ?? '', ln: t[0] ?? '' } : { fn: t[t.length - 1], ln: t.slice(0, -1).join(' ') };
+}
+const unix = (t) => new Date(Math.floor((t + 43200) / 86400) * 86400000).toISOString().slice(0, 10);
+const nameKey = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/kh/g, 'h').replace(/ts/g, 'c').replace(/[yji]+/g, 'i').replace(/x/g, 'ks').replace(/w/g, 'v').replace(/[^a-z]/g, '');
+function lev(a, b) {
+  const dp = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = dp[j]; dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+  }
+  return dp[b.length];
+}
+// Match KHL players to NHL API profiles (ex-NHL players, NHL draft picks) by birth date and surname.
+const byBirth = {};
+for (const [id, d] of Object.entries(landing)) if (d?.birthDate) (byBirth[d.birthDate] ??= []).push(Number(id));
+const khlNhl = new Map(); // NHL id -> KHL roster entry
+for (const k of khlRoster) {
+  k.bd = k.birthday ? unix(k.birthday) : `${2026 - (k.age ?? 26)}-07-01`;
+  const { fn, ln } = khlName(k.name);
+  Object.assign(k, { fn, ln });
+  const lk = nameKey(ln);
+  const hit = (byBirth[k.bd] ?? []).find((id) => { const o = nameKey(landing[id].lastName.default); return o === lk || lev(o, lk) <= 2; });
+  if (hit != null && !rosterIds.has(hit)) { k.nhlId = hit; khlNhl.set(hit, k); }
+}
+
 for (const id of allIds) {
   const d = landing[id];
-  if (!d) continue;
+  if (!d || khlNhl.has(id)) continue; // KHL players are built from the KHL data below
   const rTeam = rosterIds.get(id);
   const pTeam = prospectIds.get(id);
   const age = ageOn(d.birthDate);
@@ -557,11 +629,17 @@ for (const id of allIds) {
     st = lastNhl >= 30 ? 'NHL' : 'AHL';
   }
   else {
-    // Not in any organisation: free agent, in Europe, or retired.
+    // Not in any organisation: playing in another league, an unsigned free agent, or retired.
+    // European, minor-league and college seasons often have no 2026-27 line yet in the NHL data.
     if (!last || last.season < 20242025 || age >= 39) continue;
-    if (last.season >= 20262027 && !['NHL', 'AHL'].includes(last.leagueAbbrev)) st = 'EUR';
-    else st = 'FA';
-    if (last.season === 20242025 && age >= 35) continue;
+    if (last.season < 20252026 && age >= 30) continue; // nothing for a season: most likely retired
+    const lg = last.leagueAbbrev;
+    if (lg === 'NHL' || last.season < 20252026) st = 'FA';
+    else if (lg === 'NCAA') st = age <= 23 ? 'NCAA' : 'FA';
+    else if (statusFromLeague(lg) === 'JR') st = age <= 20 ? 'JR' : 'FA';
+    // Under contract elsewhere (Europe, AHL/ECHL deal) until next summer. KHL players are on the
+    // real KHL rosters below; anyone missing from them has left the league.
+    else st = lg === 'KHL' ? 'FA' : 'EUR';
     team = null;
   }
   const rnd = hashRand(id);
@@ -615,6 +693,290 @@ for (const id of allIds) {
   if (ed?.skatingSpeed?.speedMax?.metric) p.spd = +ed.skatingSpeed.speedMax.metric.toFixed(1);
   if (ed?.topShotSpeed?.metric) p.shs = +ed.topShotSpeed.metric.toFixed(1);
   players.push(p);
+}
+
+// ---------- KHL players ----------
+{
+  const grp = (k) => (k.role_key === 'goaltender' || k.role === 'goalie' ? 'G' : k.role_key === 'defensemen' || k.role === 'defensemen' ? 'D' : 'F');
+  // Weighted per-game production over three KHL regular seasons.
+  for (const k of khlRoster) {
+    const g = (k.grp = grp(k));
+    let w = 0, eff = 0, gp = 0;
+    const a = { ppg: 0, gpg: 0, apg: 0, toi: 0, pm: 0, pim: 0, fo: 0, sv: 0, sh: 0, share: 0 };
+    let spd = null;
+    k.h = [];
+    for (const [season, sw] of Object.entries(KHL_SEASON_W)) {
+      const st = khlStats[season]?.[k.id];
+      if (st?.top_speed >= 20) spd = Math.max(spd ?? 0, st.top_speed);
+      if (!st?.gp) continue;
+      const ww = sw * Math.min(1, st.gp / 68) ** 0.5 * st.gp;
+      gp += st.gp;
+      eff += (st.gp * sw) / 0.55;
+      w += ww;
+      if (g === 'G') {
+        a.sv += sw * (st.sv ?? 0);
+        a.sh += sw * ((st.sv ?? 0) + (st.ga ?? 0));
+        a.share += ww * Math.min(1, st.gp / 50);
+        k.h.push([Number(season), k.team, st.gp, st.w ?? 0, st.l ?? 0, 0, +(((st.sv_pct ?? 0) / 100)).toFixed(3), st.gaa ?? 0, st.so ?? 0]);
+      } else {
+        a.ppg += (ww * st.pts) / st.gp; a.gpg += (ww * st.g) / st.gp; a.apg += (ww * st.a) / st.gp;
+        a.toi += ww * (st.toi_avg ?? 0); a.pm += (ww * (st.pm ?? 0)) / st.gp; a.pim += (ww * (st.pim ?? 0)) / st.gp; a.fo += (ww * (st.fow ?? 0)) / st.gp;
+        k.h.push([Number(season), k.team, st.gp, st.g, st.a, st.pts, st.pm ?? 0, st.pim ?? 0]);
+      }
+    }
+    if (w) for (const key of ['ppg', 'gpg', 'apg', 'toi', 'pm', 'pim', 'fo', 'share']) a[key] /= w;
+    a.svp = a.sh ? a.sv / a.sh : null;
+    Object.assign(k, { m: a, eff, gp, spd });
+  }
+  // League population (enough games) for z-scores.
+  const pop = (g, f) => khlRoster.filter((k) => k.grp === g && k.eff >= 15).map(f);
+  const zf = (xs) => { const mu = mean(xs), sd = Math.sqrt(mean(xs.map((x) => (x - mu) ** 2))) || 1; return (x) => (x - mu) / sd; };
+  const Zk = {};
+  for (const g of ['F', 'D']) for (const key of ['ppg', 'gpg', 'apg', 'toi', 'pm', 'pim', 'fo']) (Zk[g] ??= {})[key] = zf(pop(g, (k) => k.m[key]));
+  const spdZ = zf(khlRoster.filter((k) => k.spd).map((k) => k.spd));
+  const gSv = khlRoster.filter((k) => k.grp === 'G' && k.m.sh > 300);
+  const svMu = gSv.reduce((x, k) => x + k.m.sv, 0) / gSv.reduce((x, k) => x + k.m.sh, 0);
+  const svZ = zf(gSv.map((k) => k.m.svp)), shareZ = zf(gSv.map((k) => k.m.share));
+  // Position quantile curve → rating; its inverse turns an NHL-based rating into a prior score.
+  const qOvr = (g, q) => { const a = KHL_Q[g], x = clamp(q, 0, 1) * 20, i = Math.min(19, Math.floor(x)); return a[i] + (a[i + 1] - a[i]) * (x - i); };
+  const qOf = (g, ovr) => { const a = KHL_Q[g]; let i = 0; while (i < 20 && a[i + 1] < ovr) i++; return clamp((i + (a[i + 1] > a[i] ? (ovr - a[i]) / (a[i + 1] - a[i]) : 0)) / 20, 0.01, 0.99); };
+  const probit = (q) => { const t = Math.sqrt(-2 * Math.log(q < 0.5 ? q : 1 - q)); const z = t - (2.515517 + 0.802853 * t + 0.010328 * t * t) / (1 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t ** 3); return q < 0.5 ? -z : z; };
+  for (const k of khlRoster) {
+    const g = k.grp, age = ageOn(k.bd);
+    let raw = 0, n = 0;
+    if (g === 'G') {
+      if (k.m.sh) {
+        const sv = (k.m.sv + svMu * 600) / (k.m.sh + 600); // shrink to league save %
+        raw = 0.65 * svZ(sv) + 0.35 * shareZ(k.m.share);
+        n = k.m.sh / 30;
+      }
+    } else if (k.eff) {
+      const Z = Zk[g];
+      raw = g === 'F' ? 0.55 * Z.ppg(k.m.ppg) + 0.45 * Z.toi(k.m.toi) : 0.4 * Z.ppg(k.m.ppg) + 0.6 * Z.toi(k.m.toi);
+      n = k.eff;
+    }
+    // Prior: NHL-based rating for players the NHL API knows, else by age.
+    let prior = age <= 20 ? -1.3 : age <= 23 ? -0.8 : -0.5;
+    const d = k.nhlId ? landing[k.nhlId] : null;
+    if (d) {
+      const pos0 = g === 'G' ? 'G' : g === 'D' ? 'D' : 'C';
+      const nhlOvr = (g === 'G' ? goOvr[k.nhlId] : skOvr[k.nhlId]) ?? prospectOvr(d, pos0).ovr;
+      prior = probit(qOf(g, nhlOvr));
+    }
+    k.score = (raw * n + prior * 15) / (n + 15);
+  }
+  const khlPlayers = [];
+  for (const g of ['F', 'D', 'G']) {
+    const list = khlRoster.filter((k) => k.grp === g).sort((a, b) => a.score - b.score);
+    list.forEach((k, i) => { k.ovr = round(qOvr(g, list.length > 1 ? i / (list.length - 1) : 0.5)); });
+  }
+  for (const k of khlRoster) {
+    const d = k.nhlId ? landing[k.nhlId] : null;
+    const id = k.nhlId ?? KHL_ID_BASE + k.khl_id;
+    const age = ageOn(k.bd);
+    const rnd = hashRand(id);
+    const g = k.grp;
+    let pos = g === 'G' ? 'G' : g === 'D' ? 'D' : k.m.fo >= 2.5 ? 'C' : k.stick === 'r' ? 'R' : 'L';
+    if (d && g === 'F' && ['C', 'L', 'R'].includes(d.position)) pos = d.position;
+    const p = {
+      id,
+      fn: d?.firstName.default ?? k.fn,
+      ln: d?.lastName.default ?? k.ln,
+      pos,
+      sh: d?.shootsCatches ?? (k.stick === 'r' ? 'R' : 'L'),
+      bd: d?.birthDate ?? k.bd,
+      ctry: d?.birthCountry ?? KHL_CTRY[k.country] ?? 'RUS',
+      ht: k.height || d?.heightInCentimeters || 183,
+      wt: k.weight || d?.weightInKilograms || 88,
+      num: k.shirt_number ?? null,
+      img: d?.headshot || k.image || null,
+      team: k.team,
+      st: 'NHL',
+      ovr: k.ovr,
+    };
+    if (!KHL_CTRY[k.country] && !d) console.warn('KHL country?', k.country, k.name);
+    if (g === 'G') p.r = goalieAttrs(p.ovr, null, rnd);
+    else {
+      const Z = Zk[g], c = (x) => clamp(x, -2.5, 2.5), noise = (sp) => (rnd() - 0.5) * sp;
+      const has = k.eff >= 5;
+      const dev = has ? {
+        sh: c(Z.gpg(k.m.gpg)) * 3.2 + noise(3),
+        pa: c(Z.apg(k.m.apg)) * 3.6 + noise(3),
+        oi: c(Z.ppg(k.m.ppg)) * 3.6,
+        di: c(Z.pm(k.m.pm)) * 1.6 + (g === 'D' ? c(Z.toi(k.m.toi)) * 1.5 : 0) - c(Z.ppg(k.m.ppg)) * 0.6 + noise(4),
+        ph: (p.wt - 92) * 0.25 + c(Z.pim(k.m.pim)) * 1.2 + noise(4),
+        dc: -c(Z.pim(k.m.pim)) * 4,
+        du: noise(10),
+      } : null;
+      if (dev) dev.ha = (dev.sh + dev.pa) / 2 + noise(3);
+      if (dev && k.spd) dev.sk = c(spdZ(k.spd)) * 6;
+      if (dev && pos === 'C') dev.fo = c(Z.fo(k.m.fo)) * 6 + 4;
+      p.r = skaterAttrs(id, pos, p.ovr, null, null, rnd, p.wt, age, dev);
+    }
+    p.ovr = calcOvrFrom(p.pos, p.r);
+    if (d?.draftDetails) p.dr = { y: d.draftDetails.year, r: d.draftDetails.round, p: d.draftDetails.overallPick, t: d.draftDetails.teamAbbrev };
+    p.pot = potential(p.ovr, age, d?.draftDetails, rnd);
+    const ct = d?.careerTotals?.regularSeason;
+    if (ct) p.car = g === 'G' ? { gp: ct.gamesPlayed, w: ct.wins ?? 0, so: ct.shutouts ?? 0 } : { gp: ct.gamesPlayed, g: ct.goals, a: ct.assists, p: ct.points };
+    p.h = [...(d ? hist(k.nhlId, g === 'G') : []), ...k.h].sort((a, b) => a[0] - b[0]);
+    p.lg = 'KHL';
+    p.c = null; // KHL salaries are not public: the game sets them from the salary model
+    const holder = prospectIds.get(k.nhlId);
+    if (holder) p.rights = holder; // NHL club holding his draft rights
+    p.tr = [];
+    if (g === 'F' && k.eff >= 30 && Zk.F.gpg(k.m.gpg) > 1.6 && p.ovr >= 76) p.tr.push('sniper');
+    if (g !== 'G' && k.eff >= 30 && Zk[g].apg(k.m.apg) > 1.7 && p.ovr >= 76) p.tr.push('playmaker');
+    if (pos === 'C' && k.eff >= 30 && Zk.F.fo(k.m.fo) > 1.5) p.tr.push('faceoff');
+    if (k.spd && spdZ(k.spd) > 1.7) p.tr.push('speed');
+    if (age >= 31 && p.ovr >= 78) p.tr.push('leader');
+    if (k.spd) p.spd = +k.spd.toFixed(1);
+    khlPlayers.push(p);
+  }
+  // Main roster: the best 13 forwards, 7 defencemen and 3 goalies; everyone else plays in the farm club.
+  for (const t of Object.values(KHL_TEAM)) {
+    for (const [g, n] of [['F', 13], ['D', 7], ['G', 3]]) {
+      const isG = (p) => (g === 'G' ? p.pos === 'G' : g === 'D' ? p.pos === 'D' : p.pos !== 'G' && p.pos !== 'D');
+      khlPlayers.filter((p) => p.team === t && isG(p)).sort((a, b) => b.ovr - a.ovr).forEach((p, i) => { p.st = i < n ? 'NHL' : 'AHL'; });
+    }
+  }
+  players.push(...khlPlayers);
+  const ex = khlPlayers.filter((p) => p.id < KHL_ID_BASE || p.id >= KHL_ID_BASE + 1e6);
+  console.log('KHL players', khlPlayers.length, 'matched to NHL profiles', ex.length, 'with NHL rights', khlPlayers.filter((p) => p.rights).length);
+  console.log('KHL top', [...khlPlayers].sort((a, b) => b.ovr - a.ovr).slice(0, 25).map((p) => `${p.fn} ${p.ln} ${p.pos} ${p.team} ${p.ovr}`).join(', '));
+}
+
+// ---------- National teams of smaller nations: IIHF rosters via Wikipedia (scripts/fetch-intl.mjs) ----------
+{
+  const NATION = {
+    Austria: 'AUT', Canada: 'CAN', Finland: 'FIN', France: 'FRA', Latvia: 'LVA', Slovakia: 'SVK', Slovenia: 'SVN', Sweden: 'SWE', Czechia: 'CZE',
+    'Czech Republic': 'CZE', Denmark: 'DNK', Germany: 'DEU', Hungary: 'HUN', Kazakhstan: 'KAZ', Norway: 'NOR', Switzerland: 'CHE',
+    'United States': 'USA', 'Great Britain': 'GBR', Italy: 'ITA', Poland: 'POL', Japan: 'JPN', Ukraine: 'UKR',
+  };
+  // Club country (IOC code of the flag) → league and its strength relative to the NHL.
+  const CLUB_LG = {
+    SWE: 'SHL', FIN: 'Liiga', SUI: 'NL', CZE: 'Czechia', SVK: 'Slovakia', GER: 'DEL', AUT: 'ICEHL', SLO: 'ICEHL', HUN: 'ICEHL', ITA: 'ICEHL',
+    DEN: 'Metal Ligaen', NOR: 'EliteHockey', GBR: 'EIHL', UK: 'EIHL', FRA: 'Magnus', POL: 'PHL', LAT: 'Latvia', KAZ: 'Kazakhstan', RUS: 'VHL', UKR: 'UHL',
+    LTU: 'Lithuania', EST: 'Estonia', ROU: 'Erste Liga', NED: 'BeNe League', BEL: 'BeNe League', JPN: 'AsiaHL', KOR: 'AsiaHL', CHN: 'AsiaHL',
+  };
+  const LGF = { SHL: 0.57, Liiga: 0.44, NL: 0.46, Czechia: 0.4, Slovakia: 0.25, DEL: 0.37, ICEHL: 0.22, VHL: 0.27, AHL: 0.39, ECHL: 0.13, NCAA: 0.2, OHL: 0.12, 'Metal Ligaen': 0.17, EliteHockey: 0.15, EIHL: 0.15, Magnus: 0.15, PHL: 0.11, Latvia: 0.1, Kazakhstan: 0.12, UHL: 0.07, AsiaHL: 0.1 };
+  const UK_LAT = { а: 'a', б: 'b', в: 'v', г: 'h', ґ: 'g', д: 'd', е: 'e', є: 'ie', ж: 'zh', з: 'z', и: 'y', і: 'i', ї: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ь: '', ю: 'iu', я: 'ia', 'ʼ': '', "'": '', ы: 'y', э: 'e', ё: 'e', ъ: '' };
+  // Word-initial є/ї/й/ю/я use y- (Ukrainian national transliteration).
+  const UK_INIT = { є: 'ye', ї: 'yi', й: 'y', ю: 'yu', я: 'ya' };
+  const ukLatin = (w) => [...w].map((ch, i) => {
+    const lo = ch.toLowerCase();
+    const l = i === 0 && UK_INIT[lo] ? UK_INIT[lo] : UK_LAT[lo];
+    if (l == null) return ch;
+    return ch === lo ? l : l.charAt(0).toUpperCase() + l.slice(1);
+  }).join('');
+  const UK_MONTH = { січня: 1, лютого: 2, березня: 3, квітня: 4, травня: 5, червня: 6, липня: 7, серпня: 8, вересня: 9, жовтня: 10, листопада: 11, грудня: 12 };
+  const pad = (n) => String(n).padStart(2, '0');
+  const strip = (x) => x.replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/'{2,3}/g, '').trim();
+  const rows = [];
+  const files = fs.existsSync(path.join(RAW, 'intl')) ? fs.readdirSync(path.join(RAW, 'intl')).sort() : [];
+  for (const f of files) {
+    const { lang, page, wikitext } = read(`intl/${f}`);
+    const year = Number((page.match(/(20\d\d)/) ?? [])[1] ?? 2026);
+    if (lang === 'en') {
+      let nation = null;
+      for (const line of wikitext.split('\n')) {
+        const h = line.match(/^==+\s*([^=]+?)\s*==+\s*$/);
+        if (h) { nation = NATION[h[1].trim()] ?? null; continue; }
+        const pos = nation && (line.match(/^\|\s*\d*\s*\|\|\s*(G|D|F)\s*\|\|/) ?? [])[1];
+        if (!pos) continue;
+        // Name cell: {{Sortname|First|Last}} or a [[link|First Last]].
+        const cell = line.split('||')[2] ?? '';
+        let nm = line.match(/\{\{sortname\|([^|}]+)\|([^|}]+)/i);
+        if (!nm) {
+          const full = strip(cell.replace(/align=left\|/, '').replace(/\s+[–-]\s+'''.*$/, '').replace(/\(.*?\)/g, '')).split(/\s+/).filter(Boolean);
+          if (full.length >= 2) nm = [null, full[0], full.slice(1).join(' ')];
+        }
+        const b = line.match(/birth date and age2?\|(?:\d{4}\|\d{1,2}\|\d{1,2}\|)?(\d{4})\|(\d{1,2})\|(\d{1,2})/);
+        if (!nm || !b) continue;
+        const club = line.split('flagicon|').pop();
+        const m = line.match(/convert\|(\d\.\d+)\|m/), ft = line.match(/convert\|(\d)\|ft\|(\d+)\|in/);
+        const kg = line.match(/convert\|(\d+)\|kg/), lb = line.match(/convert\|(\d+)\|lb/);
+        const flag = club.match(/^([A-Z]{2,3})\}\}\s*(.*)$/s);
+        rows.push({
+          nation, year, pos, fn: nm[1].trim(), ln: nm[2].trim(), bd: `${b[1]}-${pad(b[2])}-${pad(b[3])}`,
+          ht: m ? Math.round(Number(m[1]) * 100) : ft ? Math.round((Number(ft[1]) * 12 + Number(ft[2])) * 2.54) : 183,
+          wt: kg ? Number(kg[1]) : lb ? Math.round(Number(lb[1]) * 0.4536) : 85,
+          clubCtry: flag?.[1] ?? '', club: strip((flag?.[2] ?? '').replace(/\}\}/, '')),
+        });
+      }
+    } else if (lang === 'uk') {
+      // Ukrainian article: "Склад команди" tables split by Воротарі / Захисники / Нападники.
+      const sec = wikitext.slice(wikitext.indexOf('Склад команди'));
+      const year2 = Number((sec.match(/чемпіонаті світу (20\d\d)/) ?? sec.match(/(20\d\d)/) ?? [])[1] ?? 2026);
+      let pos = 'F';
+      for (const chunk of sec.split(/\n\|-/)) {
+        if (/Воротарі/.test(chunk)) pos = 'G';
+        else if (/Захисники/.test(chunk)) pos = 'D';
+        else if (/Нападники/.test(chunk)) pos = 'F';
+        const cells = chunk.split('\n').filter((l) => l.startsWith('|') && !l.startsWith('|}')).map((l) => l.replace(/^\|\s*(align="?center"?\s*\|)?/, '').trim());
+        if (cells.length < 7 || !/^\d+$/.test(cells[0])) continue;
+        const name = strip(cells[1]).split(/\s+/);
+        const bm = cells[5].match(/\[\[(\d{1,2}) (\S+)\]\]\s*\[\[(\d{4})\]\]/);
+        if (!bm || !UK_MONTH[bm[2]]) continue;
+        const club = cells[6].split('flagicon|').pop();
+        const flag = club.match(/^([A-Z]{2,3})\}\}\s*(.*)$/s);
+        rows.push({
+          nation: 'UKR', year: year2, pos, fn: ukLatin(name[0]), ln: ukLatin(name.slice(1).join(' ')), bd: `${bm[3]}-${pad(UK_MONTH[bm[2]])}-${pad(bm[1])}`,
+          sh: /П/.test(cells[2]) ? 'R' : 'L', ht: Number((cells[3].match(/\d+/) ?? [183])[0]), wt: Number((cells[4].match(/\d+/) ?? [85])[0]),
+          clubCtry: flag?.[1] ?? '', club: strip((flag?.[2] ?? '').replace(/\}\}/, '')),
+        });
+      }
+    }
+  }
+  // Already in the world (NHL / KHL / Europe data)? Same birth date and a matching surname.
+  const known = {};
+  const byName = {};
+  // Everyone the NHL API knows counts too, active or not (retired players, those who died).
+  const people = [...players, ...Object.values(landing).filter((d) => d?.birthDate).map((d) => ({ fn: d.firstName.default, ln: d.lastName.default, bd: d.birthDate }))];
+  for (const p of people) {
+    (known[p.bd] ??= []).push(nameKey(p.ln));
+    (byName[nameKey(`${p.fn}${p.ln}`)] ??= []).push(p.bd);
+  }
+  const days = (a, b) => Math.abs(new Date(a) - new Date(b)) / 86400000;
+  const seen = new Set();
+  let id = 6_000_000;
+  const added = [];
+  for (const r of rows.sort((a, b) => b.year - a.year || a.ln.localeCompare(b.ln) || a.bd.localeCompare(b.bd))) {
+    const key = `${r.bd}|${nameKey(r.ln)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const age = ageOn(r.bd);
+    if (age < 17 || age >= 38 || (r.year <= 2024 && age >= 34)) continue;
+    if ((known[r.bd] ?? []).some((k) => k === nameKey(r.ln) || lev(k, nameKey(r.ln)) <= 2)) continue;
+    // Sources disagree on birth dates now and then (even by months): same full name, about the same age.
+    if ((byName[nameKey(`${r.fn}${r.ln}`)] ?? []).some((bd) => days(bd, r.bd) <= 400)) continue;
+    if (/[={}|]/.test(r.fn + r.ln)) continue; // unparsed markup
+    let lg = CLUB_LG[r.clubCtry] ?? null;
+    if (r.clubCtry === 'USA' || r.clubCtry === 'CAN') lg = /ice hockey|University|College/.test(r.club) ? 'NCAA' : age <= 20 ? 'OHL' : 'ECHL';
+    lg ??= 'Europe';
+    const rnd = hashRand(++id);
+    // National-team players: a bit above their league's average; youth and age shade it.
+    let ovr = 55 + 22 * (LGF[lg] ?? 0.1) + 2 + (rnd() - 0.5) * 6;
+    if (age <= 20) ovr -= 3; else if (age <= 22) ovr -= 1; else if (age >= 34) ovr -= 1.5;
+    ovr = clamp(round(ovr), 48, 75);
+    const pos = r.pos === 'F' ? (rnd() < 0.35 ? 'C' : rnd() < 0.5 ? 'L' : 'R') : r.pos;
+    const p = {
+      id, fn: r.fn, ln: r.ln, pos, sh: r.sh ?? (rnd() < 0.6 ? 'L' : 'R'), bd: r.bd, ctry: r.nation,
+      ht: r.ht || 183, wt: r.wt || 85, num: null, img: null, team: null,
+      st: lg === 'NCAA' && age <= 23 ? 'NCAA' : lg === 'OHL' && age <= 20 ? 'JR' : 'EUR', ovr,
+    };
+    p.r = pos === 'G' ? goalieAttrs(ovr, null, rnd) : skaterAttrs(id, pos, ovr, null, null, rnd, p.wt, age);
+    p.ovr = calcOvrFrom(p.pos, p.r);
+    p.pot = potential(p.ovr, age, null, rnd);
+    p.h = [];
+    p.lg = lg;
+    p.c = null;
+    p.tr = [];
+    added.push(p);
+  }
+  players.push(...added);
+  const byN = {};
+  for (const p of added) byN[p.ctry] = (byN[p.ctry] ?? 0) + 1;
+  console.log('national-team players added', added.length, JSON.stringify(byN));
 }
 
 // ---------- Team cap calibration ----------

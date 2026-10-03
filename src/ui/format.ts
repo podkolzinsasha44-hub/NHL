@@ -4,6 +4,7 @@ import { FARM_RU, LG_RU, RUB_PER_USD, teamLg, userDeadline, userLg, userPhase } 
 
 export const POS_RU: Record<Pos, string> = { C: 'ЦН', L: 'ЛН', R: 'ПН', D: 'З', G: 'В' };
 export const POS_FULL: Record<Pos, string> = { C: 'Центральный нападающий', L: 'Левый нападающий', R: 'Правый нападающий', D: 'Защитник', G: 'Вратарь' };
+const LEAGUE_NAME_RU: Record<string, string> = { AHL: 'АХЛ', ECHL: 'ECHL', KHL: 'КХЛ', VHL: 'ВХЛ', MHL: 'МХЛ', Czechia: 'Чехия', Slovakia: 'Словакия', HockeyAllsvenskan: 'Аллсвенскан' };
 export const STATUS_RU: Record<string, string> = { NHL: 'НХЛ', AHL: 'АХЛ', JR: 'Юниоры', NCAA: 'NCAA', EUR: 'Европа', FA: 'Свободный агент', RET: 'Завершил карьеру' };
 
 export const ATTR_RU: Record<string, string> = {
@@ -67,6 +68,8 @@ export function moneyOf(L: League, team: string | null | undefined, n: number, d
 export function statusLabel(L: League, p: Player) {
   const lg = teamLg(L, p.team);
   if (lg === 'KHL' && (p.st === 'NHL' || p.st === 'AHL')) return p.st === 'NHL' ? 'КХЛ' : 'ВХЛ';
+  // Players under contract in another league: show that league.
+  if (p.st === 'EUR' && p.lg) return LEAGUE_NAME_RU[p.lg] ?? p.lg;
   return STATUS_RU[p.st] ?? p.st;
 }
 

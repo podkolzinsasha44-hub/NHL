@@ -97,7 +97,7 @@ export function clubGamesPlayed(p: Player, season: number) {
  */
 export const LEAGUE_STYLE: Record<LeagueId, { shot: number; fin: number }> = {
   NHL: { shot: 1, fin: 1 },
-  KHL: { shot: 0.95, fin: 0.9 },
+  KHL: { shot: 0.95, fin: 0.85 },
 };
 
 /** Fixed exchange rate used to show KHL money in roubles (reference value, not market data). */

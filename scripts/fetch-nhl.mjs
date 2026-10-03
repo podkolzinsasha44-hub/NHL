@@ -8,6 +8,9 @@ const WEB = 'https://api-web.nhle.com/v1';
 const STATS = 'https://api.nhle.com/stats/rest/en';
 const SEASONS = [20232024, 20242025, 20252026];
 const CURRENT = 20262027;
+// Older NHL seasons and drafts: players still active anywhere (Europe, AHL, NCAA, juniors) join the world.
+const OLD_SEASONS = [20152016, 20162017, 20172018, 20182019, 20192020, 20202021, 20212022, 20222023];
+const DRAFTS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
 
 async function exists(p) {
   try { await fs.access(p); return true; } catch { return false; }
@@ -89,6 +92,31 @@ async function main() {
       r.data.forEach((p) => ids.add(p.playerId));
     }
   }
+  console.log('older seasons and drafts');
+  for (const s of OLD_SEASONS) {
+    for (const kind of ['skater', 'goalie']) {
+      const exp = encodeURIComponent(`seasonId=${s} and gameTypeId=2`);
+      const r = await get(`${STATS}/${kind}/summary?limit=-1&cayenneExp=${exp}`, `stats/${kind}-summary-${s}.json`);
+      r?.data.forEach((p) => ids.add(p.playerId));
+    }
+  }
+  // Draft picks carry no player id: find each pick by name, confirm by its draft slot.
+  const picks = [];
+  for (const y of DRAFTS) {
+    const r = await get(`${WEB}/draft/picks/${y}/all`, `drafts/${y}.json`);
+    for (const p of r?.picks ?? []) if (p.firstName && p.lastName) picks.push({ ...p, year: y });
+  }
+  console.log(picks.length, 'draft picks');
+  await pool(picks, 8, async (p) => {
+    const name = `${p.firstName.default} ${p.lastName.default}`;
+    const hits = await get(`https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=10&q=${encodeURIComponent(name)}`, `search/${p.year}-${p.overallPick}.json`);
+    for (const h of hits ?? []) {
+      const id = Number(h.playerId);
+      if (ids.has(id)) return;
+      const d = await get(`${WEB}/player/${id}/landing`, `players/${id}.json`);
+      if (d?.draftDetails?.year === p.year && d.draftDetails.overallPick === p.overallPick) { ids.add(id); return; }
+    }
+  });
   console.log(ids.size, 'player profiles');
   await pool([...ids], 8, (id) => get(`${WEB}/player/${id}/landing`, `players/${id}.json`));
 

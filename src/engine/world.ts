@@ -1,12 +1,12 @@
 import { COACH_FIRST, COACH_LAST, OWNER_NAMES } from './names';
-import { genPlayer, personality, devType, POOL_LEAGUES, weightedCountry } from './gen';
+import { personality, devType } from './gen';
 import { autoLines, emptyLines, teamPower } from './lines';
-import { getState, hash01, int, next, normal, pick, seedState, useState_ } from './rng';
+import { getState, hash01, int, pick, seedState, useState_ } from './rng';
 import { emptyRecord } from './standings';
 import type { Contract, League, Player, Settings, Team } from './types';
 import { createProPlayer } from './pro';
 import { initIntl } from './intl';
-import { addDays, ageOn, clamp } from './util';
+import { addDays, ageOn } from './util';
 import { generateDraftClass } from './draft';
 import { updateStrategies } from './ai';
 import { ownerGoalFor } from './owner';
@@ -173,7 +173,7 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
     L.players[p.id] = p;
   }
 
-  generatePool(L);
+  // Every player alive today is real (world.json); only future draft classes are generated.
   generateDraftClass(L, season + 1);
 
   // Draft picks for the next three drafts
@@ -267,25 +267,6 @@ export function pickCaptain(L: League, t: Team) {
   roster.sort((a, b) => score(b) - score(a));
   t.captain = roster[0]?.id ?? null;
   t.alts = roster.slice(1, 3).map((p) => p.id);
-}
-
-function generatePool(L: League) {
-  const total = L.settings.worldSize === 'compact' ? 300 : L.settings.worldSize === 'huge' ? 5600 : 2200;
-  for (const lg of POOL_LEAGUES) {
-    const n = Math.round(total * lg.share);
-    for (let i = 0; i < n; i++) {
-      const age = int(lg.age[0], lg.age[1]);
-      // Skewed towards the lower end: few stars, many depth players.
-      const u = next();
-      let ovr = lg.ovr[0] + (lg.ovr[1] - lg.ovr[0]) * u * u + normal(0, 1.5);
-      if (age <= 21) ovr -= 3;
-      let pot = ovr;
-      if (age <= 20) pot += 6 + next() * 14;
-      else if (age <= 23) pot += 2 + next() * 9;
-      else if (age <= 25) pot += next() * 4;
-      genPlayer(L, { age, country: weightedCountry(lg.countries), ovr: clamp(ovr, 45, 80), pot, league: lg.lg, status: lg.status });
-    }
-  }
 }
 
 export function seasonOfDate(iso: string) {

@@ -1,10 +1,10 @@
 // KHL: the second club league of the world. 22 clubs (2026-27), 68-game regular season
 // (Sep 5 – Mar 20), 16-team playoffs: round 1 inside the conferences (1–8, 2–7, 3–6, 4–5), then
 // re-seeding by the overall regular-season table at every stage; best-of-7, 2-2-1-1-1; Gagarin Cup.
-// The same match engine plays KHL games; rosters are fictional (see docs/PLAN.md).
+// The same match engine plays KHL games; rosters are the real 2026-27 rosters (KHL API).
 import { COACH_FIRST, COACH_LAST, type Country } from './names';
 import { genPlayer } from './gen';
-import { int, next, normal, pick, shuffle, weighted } from './rng';
+import { int, next, normal, pick, shuffle } from './rng';
 import { emptyRecord, sortedTeams } from './standings';
 import { autoLines, emptyLines } from './lines';
 import { capHit, capIn, contractCount, floorIn, marketValueIn, roundSalary } from './contracts';
@@ -17,19 +17,6 @@ import { evaluateSeason, ownerReact } from './owner';
 import { checkAchievements } from './achievements';
 import { KHL_CHAMPION_2026, KHL_CLUBS, KHL_GAMES, type KhlClub } from './khlData';
 
-const KHL_POS_F: Player['pos'][] = ['C', 'L', 'R'];
-
-function nationFor(c: KhlClub, foreignLeft: { n: number }): Country {
-  if (c.home === 'BLR') return weighted<Country>(['BLR', 'RUS', 'CAN', 'LVA'], [0.62, 0.3, 0.05, 0.03]);
-  if (c.home === 'KAZ') return weighted<Country>(['KAZ', 'RUS', 'CAN', 'USA'], [0.55, 0.37, 0.05, 0.03]);
-  if (c.home === null) return weighted<Country>(['RUS', 'CAN', 'USA', 'FIN', 'SWE'], [0.66, 0.14, 0.1, 0.05, 0.05]);
-  if (foreignLeft.n > 0 && next() < 0.16) {
-    foreignLeft.n--;
-    return weighted<Country>(['CAN', 'USA', 'BLR', 'FIN', 'SWE', 'KAZ', 'CZE', 'SVK', 'LVA'], [0.3, 0.2, 0.14, 0.09, 0.08, 0.06, 0.05, 0.04, 0.04]);
-  }
-  return 'RUS';
-}
-
 function khlContract(L: League, p: Player, years?: number) {
   const a = ageOn(p.bd, L.date);
   const y = years ?? (a <= 22 ? int(2, 3) : a >= 32 ? 1 : int(1, 3));
@@ -37,33 +24,33 @@ function khlContract(L: League, p: Player, years?: number) {
   p.c = { aav, last: L.season + y - 1, type: 'STD', clause: null, exp: ageOn(p.bd, `${L.season + y}-07-01`) >= 27 ? 'UFA' : 'RFA', signed: L.season - (y > 1 ? int(0, 1) : 0) };
 }
 
-/** Builds a fictional roster: 23 on the main roster (13 F, 7 D, 3 G) and 11 in the VHL farm. */
-function generateRoster(L: League, c: KhlClub) {
-  const τ = c.tier;
-  const foreign = { n: c.home === 'RUS' ? int(2, 5) : 0 };
-  const mk = (pos: Player['pos'], ovr: number, main: boolean, young = false) => {
-    const age = young ? int(18, 21) : clamp(Math.round(normal(main ? 28 : 23, main ? 4 : 3)), main ? 20 : 18, main ? 37 : 30);
-    let pot = ovr;
-    if (age <= 20) pot += 5 + next() * 15;
-    else if (age <= 23) pot += 2 + next() * 8;
-    else if (age <= 25) pot += next() * 3;
-    const p = genPlayer(L, { pos, age, country: nationFor(c, foreign), ovr: clamp(ovr + (age <= 21 ? -2 : 0), 45, 84), pot, league: 'KHL', status: main ? 'NHL' : 'AHL', team: c.id });
-    // Young players of a KHL club enter the NHL draft in the year they turn 18.
-    const by = Number(p.bd.slice(0, 4));
-    if (age <= 18) p.dy = Math.max(L.season + 1, by + 18);
+/**
+ * Real KHL roster (scripts/build-world.mjs, from the league's API): KHL salaries are not public,
+ * so contracts come from the salary model. A club short of goalies or skaters (rare: injuries in
+ * the source data) gets depth from the free-agent pool, never invented players.
+ */
+function realRoster(L: League, c: KhlClub) {
+  const org = Object.values(L.players).filter((p) => p.team === c.id);
+  for (const p of org) {
     khlContract(L, p);
-    return p;
-  };
-  // Each club has one or two stars (many of them ex-NHL players), then a flatter depth chart.
-  const star = [3.5, 2, 0.8];
-  for (let i = 0; i < 13; i++) mk(i < 4 ? 'C' : pick(KHL_POS_F), 73.5 + 5 * τ - i * 0.8 + (star[i] ?? 0) + normal(0, 1.2), true);
-  for (let i = 0; i < 7; i++) mk('D', 71.5 + 5 * τ - i * 0.95 + normal(0, 1.2), true);
-  mk('G', 73 + 6 * τ + normal(0, 1), true);
-  mk('G', 67 + 3 * τ + normal(0, 1.5), true);
-  mk('G', 61 + normal(0, 2), true, next() < 0.5);
-  for (let i = 0; i < 6; i++) mk(pick(KHL_POS_F), 59 + 3 * τ + normal(0, 2.5), false, i < 3);
-  for (let i = 0; i < 4; i++) mk('D', 58 + 3 * τ + normal(0, 2.5), false, i < 2);
-  mk('G', 56 + normal(0, 2), false, true);
+    // Young undrafted players enter the NHL draft the year they turn 18.
+    const by = Number(p.bd.slice(0, 4));
+    if (!p.dr && !p.rights && L.season + 1 - by <= 19) p.dy = Math.max(L.season + 1, by + 18);
+  }
+  const need: [Player['pos'][], number][] = [[['G'], 3], [['D'], 7], [['C', 'L', 'R'], 13]];
+  for (const [pos, n] of need) {
+    let have = org.filter((p) => pos.includes(p.pos)).length;
+    if (have >= n) continue;
+    const pool = Object.values(L.players)
+      .filter((p) => !p.team && (p.st === 'FA' || p.st === 'EUR') && pos.includes(p.pos) && p.real)
+      .sort((a, b) => b.ovr - a.ovr);
+    for (const p of pool) {
+      if (have >= n) break;
+      p.team = c.id; p.st = 'NHL'; p.lg = 'KHL'; p.teams.push(c.id);
+      khlContract(L, p);
+      have++;
+    }
+  }
 }
 
 /** Keeps the payroll between the floor and the cap (clubs negotiated within the rules). */
@@ -100,7 +87,7 @@ export function initKhl(L: League, firstStart: string) {
       budget: 100,
     };
     L.teams[c.id] = t;
-    generateRoster(L, c);
+    realRoster(L, c);
     fitPayroll(L, c.id);
   }
   L.khl = { phase: 'preseason', seasonStart: firstStart, regularEnd: firstStart, deadline: `${L.season + 1}-01-25`, playoffs: null, champion: KHL_CHAMPION_2026, history: [] };
