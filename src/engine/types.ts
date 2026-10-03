@@ -1,6 +1,8 @@
 export type Pos = 'C' | 'L' | 'R' | 'D' | 'G';
 export type Status = 'NHL' | 'AHL' | 'JR' | 'NCAA' | 'EUR' | 'FA' | 'RET';
 export type Difficulty = 'rookie' | 'real' | 'hard';
+/** Club competitions simulated by the engine. Teams and games without `lg` belong to the NHL. */
+export type LeagueId = 'NHL' | 'KHL';
 export type Strategy = 'contend' | 'bubble' | 'rebuild';
 
 export interface SkaterAttrs {
@@ -114,6 +116,10 @@ export interface Player {
   jerseyRetired?: string[];
   /** Signed extension that starts after the current contract. */
   ext?: Contract;
+  /** NHL club holding the draft rights of a player under contract with a non-NHL club (e.g. KHL). */
+  rights?: string;
+  /** National team appearances and medals: "wc:2027:gold", "og:2030:silver"... */
+  intl?: string[];
   /** Draft year this player is eligible for (generated prospects). */
   dy?: number;
   /** Development focus set by the GM. */
@@ -147,11 +153,14 @@ export interface Coach {
 
 export interface Team {
   id: string;
+  /** League the club plays in (undefined = NHL). */
+  lg?: LeagueId;
   name: string;
   city: string;
   short: string;
   conf: 'E' | 'W';
-  div: 'A' | 'M' | 'C' | 'P';
+  /** NHL division; KHL clubs only use conferences ('X'). */
+  div: 'A' | 'M' | 'C' | 'P' | 'X';
   primary: string;
   secondary: string;
   accent: string;
@@ -184,6 +193,8 @@ export interface Team {
 
 export interface Game {
   id: number;
+  /** League of the game (undefined = NHL). */
+  lg?: LeagueId;
   day: string; // ISO date
   h: string;
   a: string;
@@ -374,6 +385,10 @@ export interface Settings {
   stopOnUserGames: boolean;
   watchGames: boolean;
   hideMedia: boolean;
+  /** The owner never fires the GM (trust is still tracked). */
+  noFiring?: boolean;
+  /** Russia and Belarus take part in IIHF tournaments (suspended in reality since 2022). */
+  intlRussia?: boolean;
 }
 
 export interface Scouting {
@@ -389,8 +404,108 @@ export interface Phase {
   name: 'preseason' | 'regular' | 'playoffs' | 'draft' | 'offseason' | 'freeagency';
 }
 
+/** Second club league simulated next to the NHL (the KHL), with its own calendar. */
+export interface SubLeague {
+  phase: 'preseason' | 'regular' | 'playoffs' | 'offseason';
+  seasonStart: string;
+  regularEnd: string;
+  /** Last day trades between clubs are allowed. */
+  deadline: string;
+  playoffs: Playoffs | null;
+  /** Reigning champion. */
+  champion: string;
+  history: SubSeason[];
+}
+export interface SubSeason {
+  season: number;
+  champion: string;
+  finalist: string;
+  /** Regular-season winner. */
+  regular: string;
+  topScorer?: { id: number; name: string; pts: number };
+  mvp?: number;
+  standings: { id: string; pts: number }[];
+}
+
+/** Player career: the user is one player; every club is run by the AI. */
+export interface ProState {
+  pid: number;
+  agent: string;
+  season0: number;
+  /** Contract offers on the table (from AI clubs). */
+  offers: ProOffer[];
+  /** Coach's trust in the player 0..100: rises with good play, falls with complaints. */
+  trust: number;
+  /** Season-level log written at the end of every season. */
+  log: { season: number; team: string; lg: string; gp: number; g: number; a: number; pts: number; ovr: number; note?: string }[];
+  /** Last date the player asked the coach / GM for something (cool-down). */
+  asked?: string;
+  retired?: boolean;
+}
+export interface ProOffer {
+  id: number;
+  team: string;
+  aav: number;
+  years: number;
+  kind: 'ELC' | 'STD';
+  expires: string;
+  note: string;
+}
+
+export type IntlKind = 'wc' | 'og';
+export interface IntlGame {
+  id: number;
+  day: string;
+  h: string;
+  a: string;
+  /** 'A'/'B'/'C' group games, 'q' qualification, 'qf', 'sf', 'bronze', 'final'. */
+  stage: string;
+  played?: boolean;
+  hs?: number;
+  as?: number;
+  ot?: 'OT' | 'SO' | null;
+  shH?: number;
+  shA?: number;
+  stars?: number[];
+}
+export interface IntlRecord { gp: number; w: number; otw: number; otl: number; l: number; pts: number; gf: number; ga: number }
+export interface Tournament {
+  id: string;
+  kind: IntlKind;
+  year: number;
+  name: string;
+  host: string;
+  start: string;
+  /** Rosters are named on this date. */
+  select: string;
+  teams: string[];
+  groups: Record<string, string[]>;
+  rosters: Record<string, number[]>;
+  games: IntlGame[];
+  table: Record<string, IntlRecord>;
+  phase: 'upcoming' | 'group' | 'playoff' | 'done';
+  medals?: string[];
+  /** Final ranking 1..n (filled at the end). */
+  rank?: string[];
+  mvp?: number;
+}
+export interface IntlState {
+  /** Nation coached by the user (GM careers, optional). */
+  coach?: string;
+  /** Top-division field for the next World Championship. */
+  field: string[];
+  current: Tournament | null;
+  history: { id: string; kind: IntlKind; year: number; name: string; medals: string[]; mvp?: number; topScorer?: { id: number; name: string; pts: number } }[];
+  nextGameId: number;
+}
+
 export interface League {
   v: number;
+  /** 'gm' (default): the user runs `user` club. 'player': the user is `pro.pid`, `user` is ''. */
+  mode?: 'gm' | 'player';
+  khl?: SubLeague;
+  pro?: ProState;
+  intl?: IntlState;
   seed: number;
   rng: [number, number, number, number];
   season: number; // 2026 = 2026-27

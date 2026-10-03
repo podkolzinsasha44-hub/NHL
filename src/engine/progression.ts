@@ -5,6 +5,7 @@ import { pushMsg, pushNews, social } from './news';
 import { careerGoalie, careerSkater } from './stats';
 import type { GoalieAttrs, League, Player, SkaterAttrs } from './types';
 import { ageOn, calcOvr, clamp } from './util';
+import { clubGamesPlayed } from './leagues';
 
 /** Expected yearly OVR change by age (before potential gap & randomness). */
 export function ageDelta(age: number, pos: Player['pos']): number {
@@ -41,7 +42,7 @@ export function developPlayer(L: League, p: Player, coachDev: number) {
   if (d > 0) {
     d += gap * (a <= 21 ? 0.22 : a <= 24 ? 0.15 : 0.06);
     // Ice time matters: NHL/AHL/top leagues develop faster than a press box
-    const gp = (p.stats[`${L.season - 1}r`]?.gp ?? 0);
+    const gp = clubGamesPlayed(p, L.season - 1);
     if (p.st === 'NHL' && gp < 20) d *= 0.75;
     if (p.dev === 'E' && a <= 21) d *= 1.25;
     if (p.dev === 'L' && a <= 21) d *= 0.75;

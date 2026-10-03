@@ -1,9 +1,10 @@
-import type { GoalieLine, League, Player, SkaterLine, StatLine } from './types';
+import type { GoalieLine, League, LeagueId, Player, SkaterLine, StatLine } from './types';
+import { clubStatKey } from './leagues';
 
 export const emptySkater = (): SkaterLine => ({ gp: 0, g: 0, a: 0, pts: 0, pm: 0, pim: 0, sog: 0, ppg: 0, ppp: 0, gwg: 0, toi: 0, hits: 0, blk: 0 });
 export const emptyGoalie = (): GoalieLine => ({ gp: 0, gs: 0, w: 0, l: 0, otl: 0, sa: 0, ga: 0, so: 0, toi: 0 });
 
-export const statKey = (season: number, playoff: boolean) => `${season}${playoff ? 'p' : 'r'}`;
+export const statKey = (season: number, playoff: boolean, lg: LeagueId = 'NHL') => clubStatKey(season, playoff, lg);
 
 export function line(p: Player, key: string): StatLine {
   let l = p.stats[key];

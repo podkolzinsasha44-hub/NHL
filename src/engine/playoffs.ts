@@ -3,6 +3,7 @@ import { compareTeams, playoffPicture } from './standings';
 import type { Game, League, PlayoffSeries } from './types';
 import { addDays } from './util';
 import { pressConference } from './press';
+import { isNhlGM, userLg } from './leagues';
 
 export function startPlayoffs(L: League, startDay: string) {
   const pic = playoffPicture(L);
@@ -29,9 +30,11 @@ export function startPlayoffs(L: League, startDay: string) {
   for (const s of series) scheduleNext(L, s, startDay);
   const inPo = series.some((s) => s.hi === L.user || s.lo === L.user);
   pushNews(L, { kind: 'league', title: 'Стартует плей-офф Кубка Стэнли', body: series.map((s) => `${L.teams[s.hi].short} — ${L.teams[s.lo].short}`).join('\n'), important: true });
-  if (inPo) pushMsg(L, { from: `${L.owner.name}, владелец`, kind: 'owner', title: 'Мы в плей-офф', body: 'Отличная работа. Теперь начинается настоящий хоккей — каждый матч на вес золота.' });
-  else social(L, `${L.teams[L.user].short} пролетают мимо плей-офф. Кто ответит за это?`, { kind: 'fan', team: L.user });
-  L.stops.push('playoffs');
+  if (isNhlGM(L)) {
+    if (inPo) pushMsg(L, { from: `${L.owner.name}, владелец`, kind: 'owner', title: 'Мы в плей-офф', body: 'Отличная работа. Теперь начинается настоящий хоккей — каждый матч на вес золота.' });
+    else social(L, `${L.teams[L.user].short} пролетают мимо плей-офф. Кто ответит за это?`, { kind: 'fan', team: L.user });
+  }
+  if (userLg(L) === 'NHL') L.stops.push('playoffs');
 }
 
 const HOME_PATTERN = [true, true, false, false, true, false, true]; // 2-2-1-1-1

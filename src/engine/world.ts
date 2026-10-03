@@ -4,11 +4,16 @@ import { autoLines, emptyLines, teamPower } from './lines';
 import { getState, hash01, int, next, normal, pick, seedState, useState_ } from './rng';
 import { emptyRecord } from './standings';
 import type { Contract, League, Player, Settings, Team } from './types';
+import { createProPlayer } from './pro';
+import { initIntl } from './intl';
 import { addDays, ageOn, clamp } from './util';
 import { generateDraftClass } from './draft';
 import { updateStrategies } from './ai';
 import { ownerGoalFor } from './owner';
 import { pushMsg, pushNews } from './news';
+import { initKhl } from './khl';
+import { isGM, leagueTeams, lgOf } from './leagues';
+import { CUP_RU } from './leagues';
 
 export interface WorldJson {
   meta: {
@@ -33,10 +38,26 @@ const CUPS: Record<string, number> = {
 };
 
 export interface NewCareerOpts {
+  /** Club to manage (NHL or KHL id). Ignored for a player career. */
   team: string;
   gmName: string;
   seed?: number;
   settings?: Partial<Settings>;
+  /** Player career: the user creates a player instead of managing a club. */
+  pro?: ProCreate;
+  /** National team coached by the user (optional, GM careers). */
+  nation?: string;
+}
+
+export interface ProCreate {
+  fn: string;
+  ln: string;
+  pos: Player['pos'];
+  ctry: string;
+  /** Starting club (KHL or NHL id). */
+  team: string;
+  sh?: 'L' | 'R';
+  num?: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -66,7 +87,8 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
     seasonStart: start,
     regularEnd: start,
     deadline: firstFridayOfMarch(season + 1),
-    user: o.team,
+    mode: o.pro ? 'player' : 'gm',
+    user: o.pro ? '' : o.team,
     gm: { name: o.gmName || 'GM', rep: 50, seasons: 0, cups: 0, hiredSeason: season, history: [], fired: false },
     owner: { name: pick(OWNER_NAMES), trust: 60, goal: 'playoffs', goalText: '', patience: 2, warnings: 0 },
     settings: { ...DEFAULT_SETTINGS, ...o.settings },
@@ -156,7 +178,7 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
 
   // Draft picks for the next three drafts
   for (let y = season + 1; y <= season + 3; y++) {
-    for (const t of Object.keys(L.teams)) {
+    for (const t of leagueTeams(L, 'NHL').map((x) => x.id)) {
       for (let r = 1; r <= 7; r++) L.picks.push({ id: `${y}-${r}-${t}`, season: y, round: r, orig: t, owner: t });
     }
   }
@@ -165,12 +187,21 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
   const ids = world.teams.map((t) => t.id);
   L.tmpl = world.schedule.map(([d, h, a]) => [d, ids[h], ids[a]]);
   buildSeasonGames(L, start, false);
+  // KHL clubs, rosters and the first KHL schedule (the real 2026-27 season opened on Sep 5;
+  // the in-game KHL season starts together with the career).
+  initKhl(L, start);
+  if (o.pro) createProPlayer(L, o.pro);
 
   for (const t of Object.values(L.teams)) {
     autoLines(L, t);
     pickCaptain(L, t);
   }
   updateStrategies(L);
+  initIntl(L, o.nation);
+  if (!isGM(L)) {
+    L.rng = getState();
+    return L;
+  }
 
   // Owner, scouting, intro messages
   const goal = ownerGoalFor(L, L.user);
@@ -188,7 +219,7 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
     from: `${L.owner.name}, владелец`,
     kind: 'owner',
     title: `Добро пожаловать в ${ut.name}`,
-    body: `Рад видеть вас в роли генерального менеджера. Мои ожидания на сезон ${season}-${String((season + 1) % 100).padStart(2, '0')}: ${goal.text}. Решения за вами — но я буду следить за результатом.`,
+    body: `Рад видеть вас в роли генерального менеджера. Мои ожидания на сезон ${season}-${String((season + 1) % 100).padStart(2, '0')}: ${goal.text}. Решения за вами — но я буду следить за результатом.${L.settings.noFiring ? ' (Режим «без увольнения»: доверие влияет на отношения, но уволить вас я не смогу.)' : ''}`,
   });
   pushMsg(L, {
     from: 'Ассистент GM',
@@ -197,6 +228,10 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
     body: 'Загляните во вкладку «Состав», чтобы увидеть звенья, и в «Рынок» — там обмены и свободные агенты. Большая кнопка «Продолжить» двигает время вперёд до следующего важного события. Если встретите незнакомый термин — нажмите на него или откройте «Ещё → Словарь».',
   });
   pushNews(L, { kind: 'league', title: `Стартует сезон ${season}-${String((season + 1) % 100).padStart(2, '0')}`, body: `Действующий обладатель Кубка Стэнли — ${L.teams[L.meta.champion]?.name ?? L.meta.champion}. Сезон впервые состоит из 84 матчей.` });
+  if (lgOf(ut) === 'KHL') pushMsg(L, {
+    from: 'Ассистент GM', kind: 'staff', title: 'Как устроена КХЛ',
+    body: `68 матчей регулярки, 16 команд в плей-офф: первый раунд внутри конференций, дальше пары по местам в общей таблице. Потолок зарплат ₽950 млн, нижняя граница ₽525 млн, в заявке на матч — не больше 5 легионеров. Дедлайн обменов — 25 января. Цель — ${CUP_RU.KHL}.`,
+  });
   L.rng = getState();
   return L;
 }
@@ -259,7 +294,7 @@ export function seasonOfDate(iso: string) {
 }
 
 export function powerRanking(L: League) {
-  return Object.values(L.teams)
+  return leagueTeams(L, 'NHL')
     .map((t) => ({ t, p: teamPower(L, t) }))
     .sort((a, b) => b.p - a.p);
 }

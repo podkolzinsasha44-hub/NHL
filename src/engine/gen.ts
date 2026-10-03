@@ -136,9 +136,10 @@ export function genTraits(p: Player): string[] {
   return t.slice(0, 3);
 }
 
-/** League profiles for the fictional "world pool" (players outside NHL organisations). */
+/** League profiles for the fictional "world pool" (players outside NHL and KHL organisations). */
 export const POOL_LEAGUES: { lg: string; countries: [Country, number][]; ovr: [number, number]; age: [number, number]; status: Status; share: number }[] = [
-  { lg: 'KHL', countries: [['RUS', 0.8], ['BLR', 0.06], ['KAZ', 0.05], ['CAN', 0.04], ['FIN', 0.03], ['LVA', 0.02]], ovr: [60, 78], age: [20, 35], status: 'EUR', share: 0.3 },
+  // KHL players belong to the 22 KHL clubs (khl.ts); the pool keeps their second tier.
+  { lg: 'VHL', countries: [['RUS', 0.86], ['BLR', 0.06], ['KAZ', 0.06], ['LVA', 0.02]], ovr: [54, 68], age: [20, 33], status: 'EUR', share: 0.08 },
   { lg: 'SHL', countries: [['SWE', 0.82], ['FIN', 0.06], ['CAN', 0.05], ['USA', 0.03], ['NOR', 0.02], ['DNK', 0.02]], ovr: [58, 75], age: [19, 34], status: 'EUR', share: 0.16 },
   { lg: 'Liiga', countries: [['FIN', 0.88], ['SWE', 0.04], ['CAN', 0.04], ['USA', 0.02], ['CZE', 0.02]], ovr: [56, 73], age: [19, 34], status: 'EUR', share: 0.13 },
   { lg: 'NL', countries: [['SUI', 0.65], ['CAN', 0.12], ['SWE', 0.08], ['FIN', 0.06], ['USA', 0.05], ['AUT', 0.04]], ovr: [57, 75], age: [20, 35], status: 'EUR', share: 0.08 },

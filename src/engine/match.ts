@@ -188,6 +188,8 @@ const PEN_TYPES = ['подножка', 'задержка клюшкой', 'за�
 
 export interface MatchOpts {
   playoff?: boolean;
+  /** League playing style (same for both teams): shot volume and finishing multipliers. */
+  style?: { shot: number; fin: number };
   detail?: boolean;
   b2bHome?: boolean;
   b2bAway?: boolean;
@@ -219,14 +221,15 @@ export function simulateMatch(L: League, home: Team, away: Team, o: MatchOpts = 
 
   // Tighter checking in the playoffs: talent gaps matter a bit less.
   const talent = playoff ? 0.74 : 1;
+  const styleShot = o.style?.shot ?? 1, styleFin = o.style?.fin ?? 1;
   const shot = (att: Side, dfn: Side, u: Unit, opp: Unit, t: number, period: number, kind: 'EV' | 'PP' | 'SH' | '3v3', base: number, pBase: number) => {
-    const n = poisson(base * Math.exp((K.KS * talent * (u.off - opp.def)) / 10) * (att.home ? K.HOME : 1));
+    const n = poisson(base * styleShot * Math.exp((K.KS * talent * (u.off - opp.def)) / 10) * (att.home ? K.HOME : 1));
     for (let i = 0; i < n; i++) {
       const shooter = pickWeighted(u.sk, 'sw');
       att.shots++;
       shooter.sog++;
       if (period <= 3) momentum[Math.min(11, Math.floor(t / 300))] += att.home ? 1 : -1;
-      const pGoal = clamp(pBase * Math.exp((K.KF * (shooter.fin - 75)) / 10 - (K.KG * (dfn.gq - 80)) / 10 + (K.KQ * talent * (u.off - opp.def)) / 10), 0.015, 0.45);
+      const pGoal = clamp(pBase * styleFin * Math.exp((K.KF * (shooter.fin - 75)) / 10 - (K.KG * (dfn.gq - 80)) / 10 + (K.KQ * talent * (u.off - opp.def)) / 10), 0.015, 0.45);
       const isGoal = dfn.pulled ? false : next() < pGoal;
       if (detail) {
         const close = isGoal ? next() < 0.7 : next() < 0.35;

@@ -3,6 +3,7 @@
 import { teamPower } from './lines';
 import { playoffPicture, compareTeams } from './standings';
 import type { League, Team } from './types';
+import { leagueTeams } from './leagues';
 
 export const PROJ = { K: 0.18, HOME: 0.6, OT: 0.25, PO: 0.72 };
 
@@ -46,10 +47,10 @@ export interface Odds { po: number; cup: number; pts: number; final: number }
 export function seasonOdds(L: League, n = 400): Record<string, Odds> {
   rngState = (Date.parse(L.date) / 86400000) | 0 || 99;
   const pw = powers(L);
-  const teams = Object.values(L.teams);
+  const teams = leagueTeams(L, 'NHL');
   const res: Record<string, Odds> = {};
   for (const t of teams) res[t.id] = { po: 0, cup: 0, pts: 0, final: 0 };
-  const remaining = L.phase === 'regular' || L.phase === 'preseason' ? L.games.filter((g) => !g.played && !g.series) : [];
+  const remaining = L.phase === 'regular' || L.phase === 'preseason' ? L.games.filter((g) => !g.played && !g.series && !g.lg) : [];
   const inPlayoffs = L.phase === 'playoffs' && L.playoffs;
   for (let s = 0; s < n; s++) {
     const pts: Record<string, number> = {};

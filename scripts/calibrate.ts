@@ -1,5 +1,6 @@
 // Calibration: simulates many full seasons from the real 2026-27 start and checks
-// league-wide outcomes against real NHL corridors (docs/PLAN.md §6.2).
+// league-wide outcomes against real NHL corridors (docs/PLAN.md §6.2), and the KHL
+// (played by the same engine) against the real 2025-26 KHL.
 // Usage: npx tsx scripts/calibrate.ts [seasons=40]
 import fs from 'node:fs';
 import { newCareer, type WorldJson } from '../src/engine/world';
@@ -19,18 +20,26 @@ const acc = {
   champs: {} as Record<string, number>,
   fit: [] as [number, number][],
 };
+const khl = { games: 0, goals: 0, ot: 0, homeWins: 0, sa: 0, ga: 0, topPts: [] as number[], botPts: [] as number[], topScorer: [] as number[] };
 
 const t0 = Date.now();
 for (let i = 0; i < N; i++) {
   const L: League = newCareer(world, { team: 'TOR', gmName: 'calib', seed: 1000 + i, settings: { worldSize: 'compact' } });
   const power = Object.fromEntries(Object.values(L.teams).map((t) => [t.id, teamPower(L, t)]));
   let guard = 0;
-  while (!L.playoffs?.champion && guard++ < 400) {
+  while ((!L.playoffs?.champion || L.khl?.phase !== 'offseason') && guard++ < 400) {
     L.stops = [];
     advanceDay(L);
   }
   for (const g of L.games) {
     if (!g.played || g.series) continue;
+    if (g.lg === 'KHL') {
+      khl.games++;
+      khl.goals += (g.hs ?? 0) + (g.as ?? 0);
+      if (g.ot) khl.ot++;
+      if ((g.hs ?? 0) > (g.as ?? 0)) khl.homeWins++;
+      continue;
+    }
     acc.fit.push([power[g.h] - power[g.a], (g.hs ?? 0) > (g.as ?? 0) ? 1 : 0]);
     acc.games++;
     acc.goals += (g.hs ?? 0) + (g.as ?? 0);
@@ -39,11 +48,17 @@ for (let i = 0; i < N; i++) {
     if ((g.hs ?? 0) > (g.as ?? 0)) acc.homeWins++;
     acc.shots += (g.shH ?? 0) + (g.shA ?? 0);
   }
-  for (const t of Object.values(L.teams)) { acc.ppg += t.rec.ppg; acc.ppo += t.rec.ppo; }
+  for (const t of Object.values(L.teams)) if (!t.lg) { acc.ppg += t.rec.ppg; acc.ppo += t.rec.ppo; }
   for (const p of Object.values(L.players)) {
     const s = p.stats[`${L.season}r`];
     if (s && p.pos === 'G') { acc.sa += (s as GoalieLine).sa; acc.ga += (s as GoalieLine).ga; }
+    const k = p.stats[`${L.season}rK`];
+    if (k && p.pos === 'G') { khl.sa += (k as GoalieLine).sa; khl.ga += (k as GoalieLine).ga; }
   }
+  const kst = sortedTeams(L, undefined, 'KHL');
+  khl.topPts.push(kst[0].rec.pts);
+  khl.botPts.push(kst[kst.length - 1].rec.pts);
+  khl.topScorer.push(Math.max(...Object.values(L.players).filter((p) => p.pos !== 'G' && p.stats[`${L.season}rK`]).map((p) => (p.stats[`${L.season}rK`] as SkaterLine).pts)));
   const st = sortedTeams(L);
   acc.topPts.push(st[0].rec.pts);
   acc.botPts.push(st[st.length - 1].rec.pts);
@@ -88,6 +103,13 @@ const rows: [string, number, string, number, number][] = [
   ['Presidents winner → Cup %', (acc.presCup / N) * 100, '~20', 12, 25],
   ['Favourite wins series %', (acc.favSeries / acc.series) * 100, '55-65', 55, 68],
   ['Power↔points correlation r', avg(acc.corr), '>0.5', 0.5, 0.9],
+  ['KHL goals per team-game', khl.goals / khl.games / 2, '~2.75', 2.6, 2.95],
+  ['KHL OT/SO share %', (khl.ot / khl.games) * 100, '~25', 20, 30],
+  ['KHL home win %', (khl.homeWins / khl.games) * 100, '~53', 50, 57],
+  ['KHL SV%', 1 - khl.ga / khl.sa, '~.905', 0.895, 0.915],
+  ['KHL best team points (68gp)', avg(khl.topPts), '105', 92, 112],
+  ['KHL worst team points', avg(khl.botPts), '~55', 45, 66],
+  ['KHL top scorer points', avg(khl.topScorer), '89', 68, 95],
 ];
 let fails = 0;
 for (const [name, v, real, lo, hi] of rows) {

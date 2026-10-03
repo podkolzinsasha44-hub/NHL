@@ -1,13 +1,14 @@
 // Trades: asset valuation, AI decision-making, AI↔AI deals and offers to the user.
 import { autoLines, teamPower, validateLines } from './lines';
-import { beforeNewLeagueYear, capSpace, contractCount, marketValue } from './contracts';
+import { beforeNewLeagueYear, capSpace, contractCount, salaryText, valueFor } from './contracts';
+import { isGM, leagueTeams, lgOf, teamLg, userLg } from './leagues';
 import { hash01, next, pick, shuffle } from './rng';
 import { pushMsg, pushNews, social } from './news';
 import { projectOvr } from './progression';
 import { sortedTeams } from './standings';
-import type { DraftPick, League, Player, Strategy, TradeAsset, TradeOffer, TradeRecord } from './types';
+import type { DraftPick, League, LeagueId, Player, Strategy, TradeAsset, TradeOffer, TradeRecord } from './types';
 import { addDays, ageOn, clamp, fullName } from './util';
-import { careerSkater } from './stats';
+import { careerSkater, statKey } from './stats';
 import { pressConference } from './press';
 
 const STRAT: Record<Strategy, { d: number; ice: number; sur: number; pick: number }> = {
@@ -18,17 +19,27 @@ const STRAT: Record<Strategy, { d: number; ice: number; sur: number; pick: numbe
 
 export const W = (ovr: number) => Math.pow(Math.max(0, ovr - 64), 1.9) / 10;
 
-export function tradesOpen(L: League) {
+/** Trade window of a league: closed during its playoffs and after its deadline (KHL: Jan 25). */
+export function tradesOpen(L: League, lg: LeagueId = 'NHL') {
+  if (lg === 'KHL') {
+    const K = L.khl;
+    if (!K || K.phase === 'playoffs') return false;
+    if (K.phase === 'regular' && L.date > K.deadline) return false;
+    return true;
+  }
   if (L.phase === 'playoffs') return false;
   if (L.phase === 'regular' && L.date > L.deadline) return false;
   if (L.phase === 'freeagency' && L.fa?.day && L.fa.day < 1) return false;
   return true;
 }
 
-function seasonFraction(L: League) {
-  if (L.phase !== 'regular') return 1;
-  const played = L.teams[L.user]?.rec.gp ?? 0;
-  return Math.max(0.1, (84 - played) / 84);
+/** Part of the regular season still to play for the team (current-season value). */
+function seasonFraction(L: League, team: string) {
+  const khl = teamLg(L, team) === 'KHL';
+  if ((khl ? L.khl?.phase : L.phase) !== 'regular') return 1;
+  const games = khl ? 68 : 84;
+  const played = L.teams[team]?.rec.gp ?? 0;
+  return Math.max(0.1, (games - played) / games);
 }
 
 /** Value of a player for a given team (strategy-dependent). */
@@ -47,10 +58,10 @@ export function playerValue(L: League, p: Player, team: string): number {
     if (c.exp === 'RFA' && a + yrs < 27) control += 2;
     for (let t = 0; t < Math.min(control, 8); t++) {
       const ovr = projectOvr(q, a, t);
-      const frac = t === 0 ? seasonFraction(L) : 1;
+      const frac = t === 0 ? seasonFraction(L, team) : 1;
       const injured = t === 0 && p.inj ? Math.max(0, 1 - p.inj.days / 170) : 1;
-      const aav = t < yrs ? (p.ext && p.c && startSeason + t > p.c.last ? p.ext.aav : c.aav) : marketValue(L, { ...p, ovr } as Player);
-      const mv = marketValue(L, { ...p, ovr: Math.round(ovr) } as Player);
+      const aav = t < yrs ? (p.ext && p.c && startSeason + t > p.c.last ? p.ext.aav : c.aav) : valueFor(L, { ...p, ovr } as Player, team);
+      const mv = valueFor(L, { ...p, ovr: Math.round(ovr) } as Player, team);
       const surplus = ((mv - aav) / 1e6) * 3;
       v += Math.pow(strat.d, t) * (strat.ice * W(ovr) * frac * injured + strat.sur * surplus * frac);
     }
@@ -79,7 +90,7 @@ export function projectedSlot(L: League, pk: DraftPick) {
     const st = sortedTeams(L);
     rank = 32 - st.findIndex((t) => t.id === pk.orig);
   } else {
-    const pw = Object.values(L.teams).map((t) => ({ id: t.id, p: teamPower(L, t) })).sort((a, b) => a.p - b.p);
+    const pw = leagueTeams(L, 'NHL').map((t) => ({ id: t.id, p: teamPower(L, t) })).sort((a, b) => a.p - b.p);
     rank = pw.findIndex((x) => x.id === pk.orig) + 1;
   }
   const reg = ahead <= 0 ? 1 : ahead === 1 ? 0.5 : 0.25;
@@ -123,7 +134,13 @@ export interface TradeCheck {
 
 /** Legal checks for a trade between teams a (gives aGives) and b (gives bGives). */
 export function checkTrade(L: League, a: string, b: string, aGives: TradeAsset, bGives: TradeAsset): TradeCheck {
-  if (!tradesOpen(L)) return { ok: false, reason: L.phase === 'playoffs' ? 'Во время плей-офф обмены запрещены.' : 'Дедлайн обменов прошёл. Обмены откроются после плей-офф.' };
+  const lg = teamLg(L, a) ?? 'NHL';
+  if (teamLg(L, b) !== lg) return { ok: false, reason: 'Обмены возможны только между клубами одной лиги.' };
+  if (!tradesOpen(L, lg)) {
+    const po = lg === 'KHL' ? L.khl?.phase === 'playoffs' : L.phase === 'playoffs';
+    return { ok: false, reason: po ? 'Во время плей-офф обмены запрещены.' : `Дедлайн обменов прошёл${lg === 'KHL' ? ' (25 января)' : ''}. Обмены откроются после плей-офф.` };
+  }
+  if (lg === 'KHL' && (Object.keys(aGives.retain ?? {}).length || Object.keys(bGives.retain ?? {}).length)) return { ok: false, reason: 'В КХЛ удержание части зарплаты при обмене не предусмотрено.' };
   if (!aGives.players.length && !aGives.picks.length) return { ok: false, reason: 'Добавьте, что вы отдаёте.' };
   if (!bGives.players.length && !bGives.picks.length) return { ok: false, reason: 'Добавьте, что вы получаете.' };
   const season = beforeNewLeagueYear(L) ? L.season + 1 : L.season;
@@ -138,8 +155,8 @@ export function checkTrade(L: League, a: string, b: string, aGives: TradeAsset, 
   const bIn = aav(aGives.players, aGives.retain), bOut = aav(bGives.players, bGives.retain);
   const aSpace = capSpace(L, a, season) + aOut - aIn - retainedOut(aGives.players, aGives.retain) * 0;
   const bSpace = capSpace(L, b, season) + bOut - bIn;
-  if (aSpace < 0) return { ok: false, reason: `${L.teams[a].short}: сделка не помещается под потолок (−$${(-aSpace / 1e6).toFixed(2)}M).` };
-  if (bSpace < 0) return { ok: false, reason: `${L.teams[b].short}: у них не хватает места под потолком (−$${(-bSpace / 1e6).toFixed(2)}M). Попробуйте удержать часть зарплаты.` };
+  if (aSpace < 0) return { ok: false, reason: `${L.teams[a].short}: сделка не помещается под потолок (−${salaryText(-aSpace, lg)}).` };
+  if (bSpace < 0) return { ok: false, reason: `${L.teams[b].short}: у них не хватает места под потолком (−${salaryText(-bSpace, lg)}).${lg === 'NHL' ? ' Попробуйте удержать часть зарплаты.' : ''}` };
   const cnt = (t: string, inN: number, outN: number) => contractCount(L, t) + inN - outN;
   const signed = (ids: number[]) => ids.filter((id) => L.players[id].c).length;
   if (cnt(a, signed(bGives.players), signed(aGives.players)) > 50) return { ok: false, reason: `${L.teams[a].short}: превышен лимит 50 контрактов.` };
@@ -297,7 +314,7 @@ export function executeTrade(L: League, a: string, b: string, aGives: TradeAsset
       }
       p.team = to;
       if (!p.teams.includes(to)) p.teams.push(to);
-      if (p.st === 'NHL' || p.st === 'AHL') p.st = p.ovr >= 70 ? 'NHL' : p.st;
+      if (p.st === 'NHL' || p.st === 'AHL') p.st = p.ovr >= (L.teams[to].lg === 'KHL' ? 66 : 70) ? 'NHL' : p.st;
       p.wantsTrade = false;
       p.morale = clamp(p.morale + (L.teams[to].strategy === 'contend' ? 5 : -3), 0, 100);
       delete L.negotiations[id];
@@ -357,7 +374,7 @@ export function regradeTrades(L: League) {
         if (!p) return s;
         let v = 0;
         for (let y = t.season; y <= L.season; y++) {
-          const st = p.stats[`${y}r`];
+          const st = p.stats[statKey(y, false, lgOf(L.teams[t.a]))];
           if (st && p.teams.includes(t.a === L.user ? t.a : t.b)) v += 'pts' in st ? st.pts : st.w * 2;
         }
         return s + v + p.ovr * 0.2;
@@ -372,33 +389,39 @@ export function regradeTrades(L: League) {
 // ---------- Weekly AI activity ----------
 
 export function weeklyTradeActivity(L: League) {
-  if (!tradesOpen(L)) return;
-  const nearDeadline = L.phase === 'regular' && L.date >= addDays(L.deadline, -14);
-  const n = nearDeadline ? 6 : 2;
-  for (let i = 0; i < n; i++) if (next() < 0.8) aiToAiTrade(L);
-  if (next() < (nearDeadline ? 0.6 : 0.3)) offerToUser(L);
+  for (const lg of ['NHL', 'KHL'] as const) {
+    if (!tradesOpen(L, lg)) continue;
+    const nearDeadline = lg === 'KHL'
+      ? L.khl?.phase === 'regular' && L.date >= addDays(L.khl.deadline, -14)
+      : L.phase === 'regular' && L.date >= addDays(L.deadline, -14);
+    const n = lg === 'KHL' ? (nearDeadline ? 3 : 1) : nearDeadline ? 6 : 2;
+    for (let i = 0; i < n; i++) if (next() < 0.8) aiToAiTrade(L, lg);
+    if (isGM(L) && userLg(L) === lg && next() < (nearDeadline ? 0.6 : 0.3)) offerToUser(L);
+  }
   // Expire old offers
   L.offers = L.offers.filter((o) => o.expires >= L.date);
 }
 
-function aiToAiTrade(L: League) {
-  const teams = Object.values(L.teams).filter((t) => t.id !== L.user);
+function aiToAiTrade(L: League, lg: LeagueId) {
+  const khl = lg === 'KHL';
+  const teams = leagueTeams(L, lg).filter((t) => t.id !== L.user);
   const buyers = shuffle(teams.filter((t) => t.strategy === 'contend'));
   const sellers = shuffle(teams.filter((t) => t.strategy === 'rebuild' || t.strategy === 'bubble'));
   const buyer = buyers[0], seller = sellers[0];
   if (!buyer || !seller) return;
   const vets = Object.values(L.players).filter((p) => {
-    if (p.team !== seller.id || p.st !== 'NHL' || p.ovr < 76 || !p.c || p.c.clause === 'NMC') return false;
+    if (p.team !== seller.id || p.st !== 'NHL' || p.ovr < (khl ? 70 : 76) || !p.c || p.c.clause === 'NMC' || p.id === L.pro?.pid) return false;
     const a = ageOn(p.bd, L.date);
     // Rebuilding clubs sell veterans, not their young core
-    return a >= 27 && !(p.ovr >= 86 && a <= 28);
+    return a >= 27 && !(p.ovr >= (khl ? 80 : 86) && a <= 28);
   });
   if (!vets.length) return;
   const target = pick(vets);
   const give: TradeAsset = { players: [target.id], picks: [] };
-  const price = askPriceFrom(L, seller.id, buyer.id, give);
+  const price = askPriceFrom(L, seller.id, buyer.id, give, khl ? 74 : 80);
   if (!price) return;
   if (!checkTrade(L, seller.id, buyer.id, give, price).ok) {
+    if (khl) return;
     // Sellers often eat part of the salary to make a deal fit under the buyer's cap.
     give.retain = { [target.id]: 0.5 };
     if (!checkTrade(L, seller.id, buyer.id, give, price).ok) return;
@@ -411,13 +434,13 @@ function aiToAiTrade(L: League) {
 }
 
 /** Like askPrice but between two AI teams: what `seller` wants from `buyer`. */
-function askPriceFrom(L: League, seller: string, buyer: string, want: TradeAsset): TradeAsset | null {
+function askPriceFrom(L: League, seller: string, buyer: string, want: TradeAsset, core = 80): TradeAsset | null {
   const target = packageValue(L, want, seller) * 1.03;
   const assets: { a: TradeAsset; v: number }[] = [];
   for (const id in L.players) {
     const p = L.players[id];
-    if (p.team !== buyer || p.st === 'RET' || p.c?.clause === 'NMC') continue;
-    if (p.st === 'NHL' && p.ovr >= 80) continue; // contenders keep their core
+    if (p.team !== buyer || p.st === 'RET' || p.c?.clause === 'NMC' || p.id === L.pro?.pid) continue;
+    if (p.st === 'NHL' && p.ovr >= core) continue; // contenders keep their core
     const v = playerValue(L, p, seller);
     if (v > 1) assets.push({ a: { players: [p.id], picks: [] }, v });
   }
@@ -437,10 +460,11 @@ function askPriceFrom(L: League, seller: string, buyer: string, want: TradeAsset
 
 function offerToUser(L: League) {
   const user = L.user;
-  const mine = Object.values(L.players).filter((p) => p.team === user && (p.st === 'NHL' || p.st === 'AHL') && p.c && p.c.clause !== 'NMC' && p.ovr >= 72);
+  const lg = teamLg(L, user) ?? 'NHL';
+  const mine = Object.values(L.players).filter((p) => p.team === user && (p.st === 'NHL' || p.st === 'AHL') && p.c && p.c.clause !== 'NMC' && p.ovr >= (lg === 'KHL' ? 66 : 72));
   if (!mine.length) return;
   const target = pick(mine);
-  const teams = shuffle(Object.values(L.teams).filter((t) => t.id !== user));
+  const teams = shuffle(leagueTeams(L, lg).filter((t) => t.id !== user));
   for (const t of teams.slice(0, 6)) {
     const want: TradeAsset = { players: [target.id], picks: [] };
     const vTarget = playerValue(L, target, t.id);
@@ -498,7 +522,7 @@ export function acceptOffer(L: League, offerId: number) {
 
 /** Trade block: AI teams interested in a player and what they'd give (rough). */
 export function interestIn(L: League, p: Player) {
-  return Object.values(L.teams)
+  return leagueTeams(L, teamLg(L, p.team) ?? 'NHL')
     .filter((t) => t.id !== p.team)
     .map((t) => ({ t, v: playerValue(L, p, t.id) }))
     .sort((a, b) => b.v - a.v)

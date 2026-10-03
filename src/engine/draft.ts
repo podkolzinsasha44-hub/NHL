@@ -5,6 +5,7 @@ import { pushMsg, pushNews, social } from './news';
 import { compareTeams } from './standings';
 import type { DraftState, League, Player } from './types';
 import { ageOn, clamp } from './util';
+import { isNhlGM, leagueTeamIds, leagueTeams } from './leagues';
 
 export const LOTTERY_ODDS = [18.5, 13.5, 11.5, 9.5, 8.5, 7.5, 6.5, 6.0, 5.0, 3.5, 3.0, 2.5, 2.0, 1.5, 0.5, 0.5];
 
@@ -71,11 +72,17 @@ export function publicScore(p: Player, year: number) {
   return p.pot * 0.78 + p.ovr * 0.22 + (hash01(p.id, year) - 0.5) * 9;
 }
 
+/** Young players at a KHL club can be drafted: the NHL club gets their rights, they stay in the KHL. */
+const atKhlClub = (L: League, p: Player) => !!p.team && L.teams[p.team]?.lg === 'KHL';
+
 export function draftPool(L: League, year: number): Player[] {
   const out: Player[] = [];
   for (const id in L.players) {
     const p = L.players[id];
-    if (p.team || p.st === 'RET' || p.st === 'NHL' || p.st === 'AHL') continue;
+    if (p.st === 'RET' || p.rights) continue;
+    if (atKhlClub(L, p)) {
+      if (!p.dy) continue;
+    } else if (p.team || p.st === 'NHL' || p.st === 'AHL') continue;
     const dy = draftYearOf(p);
     if (dy === year) out.push(p);
     else if (dy && dy < year && ageOn(p.bd, `${year}-09-15`) <= 20) out.push(p);
@@ -107,7 +114,7 @@ export function potRange(L: League, p: Player): [number, number] {
 export function lotteryTeams(L: League): string[] {
   const playoffTeams = new Set<string>();
   for (const s of L.playoffs?.series ?? []) if (s.round === 1) { playoffTeams.add(s.hi); playoffTeams.add(s.lo); }
-  return Object.values(L.teams)
+  return leagueTeams(L, 'NHL')
     .filter((t) => !playoffTeams.has(t.id))
     .sort((a, b) => -compareTeams(a, b)) // worst first
     .map((t) => t.id);
@@ -153,7 +160,7 @@ export function finalizeDraftOrder(L: League) {
     for (const s of po.series) if (s.hi === t || s.lo === t) r = Math.max(r, s.round + (s.winner === t ? 1 : 0));
     return r; // 1 lost R1 ... 4 lost final, 5 champion
   };
-  const playoffTeams = Object.keys(L.teams).filter((t) => !lottery.includes(t));
+  const playoffTeams = leagueTeamIds(L, 'NHL').filter((t) => !lottery.includes(t));
   playoffTeams.sort((a, b) => {
     const ra = Math.min(roundOut(a), 3), rb = Math.min(roundOut(b), 3);
     if (ra !== rb) return ra - rb;
@@ -226,8 +233,12 @@ export function makePick(L: League, playerId: number) {
   const pk = currentPick(L)!;
   const p = L.players[playerId];
   pk.used = p.id;
-  p.team = pk.owner;
-  p.teams = [pk.owner];
+  if (atKhlClub(L, p)) {
+    p.rights = pk.owner;
+  } else {
+    p.team = pk.owner;
+    p.teams = [pk.owner];
+  }
   p.dr = { y: D.year, r: pk.round, p: pk.slot ?? D.current + 1, t: pk.owner };
   p.rightsUntil = Math.max(D.year, Number(p.bd.slice(0, 4)) + 21);
   D.pool = D.pool.filter((x) => x !== p.id);
@@ -281,6 +292,7 @@ export function finishDraft(L: League) {
 // ---------- Scouting ----------
 
 export function weeklyScouting(L: League) {
+  if (!isNhlGM(L)) return;
   const year = L.draft && !L.draft.done ? L.draft.year : L.season + 1;
   const pool = draftPool(L, year);
   const regionOf = (p: Player) => (['CAN'].includes(p.ctry) ? 'CHL' : p.ctry === 'USA' ? 'USA' : p.ctry === 'RUS' || p.ctry === 'BLR' || p.ctry === 'KAZ' ? 'RUS' : 'EUR');
@@ -300,6 +312,7 @@ export function weeklyScouting(L: League) {
 }
 
 export function sendScout(L: League, playerId: number) {
+  if (!isNhlGM(L)) return false;
   const cap = 1 + L.teams[L.user].staff.scouting;
   if (L.scouting.sentThisWeek >= cap) return false;
   const cur = L.scouting.know[playerId] ?? 0.15;

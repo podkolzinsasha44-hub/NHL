@@ -3,8 +3,9 @@ import { pushMsg, pushNews } from './news';
 import { sortedTeams } from './standings';
 import type { League, Player, Team } from './types';
 import { genPlayer } from './gen';
-import { minSalaryOf } from './util';
 import { ageOn } from './util';
+import { leagueTeams } from './leagues';
+import { minSalaryFor } from './contracts';
 
 export function groupByTeam(L: League): Map<string, Player[]> {
   const m = new Map<string, Player[]>();
@@ -19,19 +20,25 @@ export function groupByTeam(L: League): Map<string, Player[]> {
 }
 
 export function updateStrategies(L: League) {
-  const power = Object.values(L.teams)
-    .map((t) => ({ t, p: teamPower(L, t) }))
-    .sort((a, b) => b.p - a.p);
-  const standing = sortedTeams(L);
-  const gp = Object.values(L.teams)[0]?.rec.gp ?? 0;
-  for (let i = 0; i < power.length; i++) {
-    const t = power[i].t;
-    let rank = i + 1;
-    if (gp >= 25) {
-      const sRank = standing.findIndex((x) => x.id === t.id) + 1;
-      rank = Math.round(rank * 0.4 + sRank * 0.6);
+  for (const lg of ['NHL', 'KHL'] as const) {
+    const teams = leagueTeams(L, lg);
+    if (!teams.length) continue;
+    const power = teams
+      .map((t) => ({ t, p: teamPower(L, t) }))
+      .sort((a, b) => b.p - a.p);
+    const standing = sortedTeams(L, undefined, lg);
+    const gp = teams[0]?.rec.gp ?? 0;
+    const n = teams.length;
+    for (let i = 0; i < power.length; i++) {
+      const t = power[i].t;
+      let rank = i + 1;
+      if (gp >= 25) {
+        const sRank = standing.findIndex((x) => x.id === t.id) + 1;
+        rank = Math.round(rank * 0.4 + sRank * 0.6);
+      }
+      // Same shares as the NHL's 10 / 11 / 11 split.
+      t.strategy = rank <= Math.round(n * 0.31) ? 'contend' : rank <= Math.round(n * 0.66) ? 'bubble' : 'rebuild';
     }
-    t.strategy = rank <= 10 ? 'contend' : rank <= 21 ? 'bubble' : 'rebuild';
   }
 }
 
@@ -117,7 +124,7 @@ function emergencyGoalie(L: League, team: string): Player {
   const g = best ?? genPlayer(L, { pos: 'G', age: 27, country: 'CAN', ovr: 58, pot: 58, league: 'ECHL', status: 'FA' });
   g.team = team;
   g.st = 'NHL';
-  g.c = { aav: minSalaryOf(L), last: L.season, type: 'STD', clause: null, exp: 'UFA', signed: L.season };
+  g.c = { aav: minSalaryFor(L, team), last: L.season, type: 'STD', clause: null, exp: 'UFA', signed: L.season };
   if (!g.teams.includes(team)) g.teams.push(team);
   pushNews(L, { kind: 'sign', title: `${L.teams[team].short} экстренно подписывают вратаря ${g.fn} ${g.ln}`, team, players: [g.id] });
   return g;

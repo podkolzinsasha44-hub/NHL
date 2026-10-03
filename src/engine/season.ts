@@ -13,6 +13,8 @@ import { weeklyTradeActivity } from './trades';
 import { weeklyMorale, checkMilestones } from './events';
 import { pressConference } from './press';
 import { calendarEvents } from './calendar';
+import { gameLg, isNhlGM, LEAGUE_STYLE, userTeam } from './leagues';
+import { khlAfterGames, khlGamesToday, khlPhaseTick, onKhlPlayoffGame } from './khl';
 
 export interface DayReport {
   date: string;
@@ -48,9 +50,11 @@ export function playGame(L: League, g: Game): MatchBox {
   const H = L.teams[g.h], A = L.teams[g.a];
   const playoff = !!g.series;
   const b2bH = teamPlayedYesterday(H, g.day), b2bA = teamPlayedYesterday(A, g.day);
-  const isUser = g.h === L.user || g.a === L.user;
+  const ut = userTeam(L);
+  const isUser = g.h === ut || g.a === ut;
   const box = simulateMatch(L, H, A, {
     playoff,
+    style: LEAGUE_STYLE[gameLg(g)],
     detail: isUser && detailUserGames,
     b2bHome: b2bH,
     b2bAway: b2bA,
@@ -72,7 +76,8 @@ function applyGame(L: League, g: Game, box: MatchBox) {
   g.hs = r.hs; g.as = r.as; g.ot = r.ot; g.shH = r.shH; g.shA = r.shA; g.stars = r.stars;
   const H = L.teams[g.h], A = L.teams[g.a];
   H.lastGame = g.day; A.lastGame = g.day;
-  const key = statKey(L.season, playoff);
+  const lg = gameLg(g);
+  const key = statKey(L.season, playoff, lg);
 
   if (!playoff) {
     const upd = (t: Team, gf: number, ga: number, home: boolean, pp: [number, number], ppAgainst: [number, number], sf: number, sa: number) => {
@@ -178,10 +183,14 @@ function applyGame(L: League, g: Game, box: MatchBox) {
     if (!playoff && (t.rec.streak === 'L5' || t.rec.streak === 'W5')) pressConference(L, t.rec.streak === 'L5' ? 'losing' : 'winning');
   }
 
-  checkMilestones(L, box);
+  if (lg === 'NHL') checkMilestones(L, box);
   if (playoff) {
-    const res = onPlayoffGame(L, g);
-    if (res === 'final') L.stops.push('cup');
+    if (lg === 'KHL') {
+      onKhlPlayoffGame(L, g);
+    } else {
+      const res = onPlayoffGame(L, g);
+      if (res === 'final') L.stops.push('cup');
+    }
   }
 }
 
@@ -205,18 +214,18 @@ export function advanceDay(L: League): DayReport {
 
   if (L.phase === 'preseason' && date >= L.seasonStart) {
     L.phase = 'regular';
-    for (const t of Object.values(L.teams)) t.rec = emptyRecord();
+    for (const t of Object.values(L.teams)) if (!t.lg) t.rec = emptyRecord();
     pushNews(L, { kind: 'league', title: 'Регулярный сезон начался!' });
   }
 
   if (L.phase === 'regular' || L.phase === 'playoffs') {
-    if (date === addDays(L.deadline, -1) && L.phase === 'regular') {
+    if (date === addDays(L.deadline, -1) && L.phase === 'regular' && isNhlGM(L)) {
       pushMsg(L, { from: 'Ассистент GM', kind: 'staff', title: 'Завтра дедлайн обменов', body: 'Это последний шанс усилить состав (или распродать активы) до конца сезона. После дедлайна обмены закрыты до окончания плей-офф.' });
       pressConference(L, 'deadline');
       L.stops.push('deadline');
     }
     const byTeam = groupByTeam(L);
-    const todays = L.games.filter((g) => g.day === date && !g.played);
+    const todays = L.games.filter((g) => g.day === date && !g.played && !g.lg);
     // Rosters must be valid before games
     const playing = new Set<string>();
     for (const g of todays) { playing.add(g.h); playing.add(g.a); }
@@ -225,17 +234,38 @@ export function advanceDay(L: League): DayReport {
       const notes = manageRoster(L, t, byTeam.get(tid) ?? [], tid === L.user);
       if (tid === L.user) notifyUser(L, notes);
     }
+    const ut = userTeam(L);
     for (const g of todays) {
       const box = playGame(L, g);
       report.games.push(g);
-      if (g.h === L.user || g.a === L.user) report.userGame = { game: g, box };
+      if (g.h === ut || g.a === ut) report.userGame = { game: g, box };
     }
-    if (L.phase === 'regular' && L.games.every((g) => g.series || g.played)) {
+    if (L.phase === 'regular' && L.games.every((g) => g.lg || g.series || g.played)) {
       // Regular season over
       endRegularSeason(L);
       startPlayoffs(L, addDays(date, 3));
     }
   }
+
+  // KHL games run on their own calendar, whatever the NHL phase is.
+  khlPhaseTick(L);
+  const khlToday = khlGamesToday(L);
+  if (khlToday.length) {
+    const byTeam = groupByTeam(L);
+    const playing = new Set<string>();
+    for (const g of khlToday) { playing.add(g.h); playing.add(g.a); }
+    for (const tid of playing) {
+      const notes = manageRoster(L, L.teams[tid], byTeam.get(tid) ?? [], tid === L.user);
+      if (tid === L.user) notifyUser(L, notes);
+    }
+    const ut = userTeam(L);
+    for (const g of khlToday) {
+      const box = playGame(L, g);
+      report.games.push(g);
+      if (g.h === ut || g.a === ut) report.userGame = { game: g, box };
+    }
+  }
+  khlAfterGames(L);
 
   tickInjuries(L);
   calendarEvents(L);
@@ -245,9 +275,13 @@ export function advanceDay(L: League): DayReport {
   if (dow === 1) {
     weeklyMorale(L);
     weeklyScouting(L);
-    if (L.phase === 'regular') {
+    const nhlRegular = L.phase === 'regular', khlRegular = L.khl?.phase === 'regular';
+    if (nhlRegular || khlRegular) {
       const byTeam = groupByTeam(L);
-      for (const t of Object.values(L.teams)) if (t.id !== L.user) aiPromote(L, byTeam.get(t.id) ?? []);
+      for (const t of Object.values(L.teams)) {
+        if (t.id === L.user || (t.lg === 'KHL' ? !khlRegular : !nhlRegular)) continue;
+        aiPromote(L, byTeam.get(t.id) ?? []);
+      }
       updateStrategies(L);
     }
     if (L.phase === 'regular' || L.phase === 'offseason' || L.phase === 'preseason') weeklyTradeActivity(L);
@@ -269,11 +303,14 @@ function endRegularSeason(L: League) {
 }
 
 export function userGameToday(L: League) {
-  return L.games.find((g) => g.day === L.date && !g.played && (g.h === L.user || g.a === L.user));
+  const ut = userTeam(L);
+  return L.games.find((g) => g.day === L.date && !g.played && (g.h === ut || g.a === ut));
 }
 
 export function nextUserGame(L: League) {
-  return L.games.filter((g) => !g.played && (g.h === L.user || g.a === L.user)).sort((a, b) => (a.day < b.day ? -1 : 1))[0];
+  const ut = userTeam(L);
+  if (!ut) return undefined;
+  return L.games.filter((g) => !g.played && (g.h === ut || g.a === ut)).sort((a, b) => (a.day < b.day ? -1 : 1))[0];
 }
 
 export function teamGames(L: League, team: string) {

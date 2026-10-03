@@ -2,12 +2,16 @@ import { pushMsg, pushNews } from './news';
 import { playoffResultOf } from './playoffs';
 import { sortedTeams } from './standings';
 import type { League } from './types';
+import { isGM, lgOf } from './leagues';
+import { khlPlayoffResult } from './khl';
 
 export interface Achievement {
   id: string;
   title: string;
   desc: string;
   icon: string;
+  /** Career type the achievement belongs to (default: GM careers). */
+  mode?: 'gm' | 'player' | 'all';
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -32,7 +36,27 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'vezina', title: 'Стена', desc: 'Ваш вратарь выигрывает Везину', icon: '🧤' },
   { id: 'calder', title: 'Новичок года', desc: 'Ваш новичок выигрывает Колдер Трофи', icon: '🌟' },
   { id: 'draft_star', title: 'Глаз-алмаз', desc: 'Задрафтованный вами игрок достигает рейтинга 85', icon: '💎' },
+  { id: 'gagarin', title: 'Кубок Гагарина', desc: 'Выиграйте Кубок Гагарина как GM клуба КХЛ', icon: '🏆' },
+  { id: 'two_leagues', title: 'Две лиги', desc: 'Поработайте генеральным менеджером и в НХЛ, и в КХЛ', icon: '🌍' },
+  { id: 'intl_gold', title: 'Золото сборной', desc: 'Выиграйте чемпионат мира или Олимпиаду как тренер сборной', icon: '🥇', mode: 'all' },
+  // Player career
+  { id: 'pro_debut', title: 'Первый матч', desc: 'Сыграйте первый матч на профессиональном уровне', icon: '🏒', mode: 'player' },
+  { id: 'pro_goal', title: 'Первая шайба', desc: 'Забейте первый гол в карьере', icon: '🚨', mode: 'player' },
+  { id: 'pro_drafted', title: 'Выбор на драфте', desc: 'Вас выбирают на драфте НХЛ', icon: '🎯', mode: 'player' },
+  { id: 'pro_nhl', title: 'Мечта сбылась', desc: 'Сыграйте матч в НХЛ', icon: '🌟', mode: 'player' },
+  { id: 'pro_100', title: 'Сотня', desc: 'Наберите 100 очков за карьеру (НХЛ + КХЛ)', icon: '💯', mode: 'player' },
+  { id: 'pro_national', title: 'За сборную', desc: 'Сыграйте за национальную сборную', icon: '🎽', mode: 'player' },
+  { id: 'pro_gold', title: 'Чемпион мира', desc: 'Выиграйте золото чемпионата мира или Олимпиады', icon: '🥇', mode: 'player' },
+  { id: 'pro_gagarin', title: 'Кубок Гагарина', desc: 'Выиграйте Кубок Гагарина как игрок', icon: '🏆', mode: 'player' },
+  { id: 'pro_cup', title: 'Имя на Кубке', desc: 'Выиграйте Кубок Стэнли как игрок', icon: '🏆', mode: 'player' },
+  { id: 'pro_award', title: 'Индивидуальный приз', desc: 'Получите индивидуальную награду лиги', icon: '🎖️', mode: 'player' },
 ];
+
+/** Achievements shown for the current career type. */
+export function achievementsFor(L: League) {
+  const m = isGM(L) ? 'gm' : 'player';
+  return ACHIEVEMENTS.filter((a) => (a.mode ?? 'gm') === m || a.mode === 'all');
+}
 
 export function unlock(L: League, id: string) {
   if (L.achievements[id]) return;
@@ -44,8 +68,28 @@ export function unlock(L: League, id: string) {
 }
 
 export function checkAchievements(L: League) {
+  if (!isGM(L)) return;
   const u = L.user;
   const t = L.teams[u];
+  if (lgOf(t) === 'KHL') {
+    L.flags.khlGM = true;
+    if (L.flags.nhlGM) unlock(L, 'two_leagues');
+    if (L.trades.some((x) => x.user)) unlock(L, 'first_trade');
+    if (L.seasonLog.signings > 0) unlock(L, 'first_sign');
+    if (L.gm.seasons >= 10) unlock(L, 'veteran');
+    const po = L.khl?.playoffs;
+    if (po && po.season === L.season) {
+      const r = khlPlayoffResult(L, u);
+      if (r >= 1) unlock(L, 'playoffs');
+      if (r >= 2) unlock(L, 'series');
+      if (r === 5) unlock(L, 'gagarin');
+    }
+    if (t.rec.pts >= 100) unlock(L, 'hundred');
+    if (t.rec.gp >= 68 && sortedTeams(L, undefined, 'KHL')[0].id === u) unlock(L, 'presidents');
+    return;
+  }
+  L.flags.nhlGM = true;
+  if (L.flags.khlGM) unlock(L, 'two_leagues');
   if (L.trades.some((x) => x.user)) unlock(L, 'first_trade');
   if (L.trades.some((x) => x.user && ((x.a === u && x.grades?.a === 'A+') || (x.b === u && x.grades?.b === 'A+')))) unlock(L, 'steal');
   if (L.seasonLog.signings > 0) unlock(L, 'first_sign');
