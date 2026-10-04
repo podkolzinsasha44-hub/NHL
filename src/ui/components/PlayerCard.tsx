@@ -324,3 +324,24 @@ export function MiniCard({ p, L, onClick }: { p: Player; L: League; onClick?: ()
   );
 }
 
+
+/** Compact rarity token for the rink in the lines editor: photo, rating and name. */
+export function RinkToken({ p, L, w = 64 }: { p: Player; L: League; w?: number }) {
+  const t = p.team ? L.teams[p.team] : null;
+  const tier = tierOf(p.ovr);
+  const look = LOOK[tier];
+  const foil = look.frame === null;
+  return (
+    <div className={cx('relative rounded-[12px] p-[1.5px] shadow-[0_8px_18px_-6px_rgba(0,0,0,0.8)]', foil && 'card-foil', tier === 'mythic' && 'card-foil-fast')} style={{ width: w, height: w * 1.32, background: foil ? undefined : look.frame! }}>
+      <div className="relative w-full h-full rounded-[10.5px] overflow-hidden" style={{ background: look.inner(t?.primary ?? '#1b2a44') }}>
+        <div className="absolute inset-0" style={{ background: `radial-gradient(70% 45% at 55% 35%, ${look.glow}, transparent 70%)` }} />
+        <div className="absolute -right-[6%] top-[12%] w-[104%] bottom-[20%]">
+          <CardPhoto p={p} t={t} glow={look.glow} />
+        </div>
+        <div className="absolute inset-x-0 bottom-0 h-[40%]" style={{ background: 'linear-gradient(180deg, transparent, rgba(4,6,12,0.95) 50%)' }} />
+        <div className={cx('absolute left-1 top-0.5 num leading-none', !look.dark && 'drop-shadow', look.ovr)} style={{ fontSize: w * 0.28 }}>{p.ovr}</div>
+        <div className="absolute inset-x-0.5 bottom-[3px] text-center font-display uppercase text-white truncate leading-none" style={{ fontSize: Math.max(11, w * 0.18) }}>{p.ln}</div>
+      </div>
+    </div>
+  );
+}
