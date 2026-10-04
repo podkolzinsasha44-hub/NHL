@@ -117,14 +117,22 @@ export function ovrColor(ovr: number) {
   if (ovr >= 70) return '#c9d4e4';
   return '#c08a5a';
 }
-export function tierOf(ovr: number): 'legend' | 'elite' | 'gold' | 'silver' | 'bronze' {
-  if (ovr >= 93) return 'legend';
-  if (ovr >= 87) return 'elite';
-  if (ovr >= 80) return 'gold';
-  if (ovr >= 70) return 'silver';
-  return 'bronze';
+/** Card rarity: the rarer, the stronger (thresholds keep the top tiers to a handful of players). */
+export type Tier = 'mythic' | 'legend' | 'epic' | 'elite' | 'gold' | 'silver' | 'bronze' | 'base';
+export const TIERS: { id: Tier; min: number; ru: string }[] = [
+  { id: 'mythic', min: 95, ru: 'Мифическая' },
+  { id: 'legend', min: 92, ru: 'Легендарная' },
+  { id: 'epic', min: 89, ru: 'Эпическая' },
+  { id: 'elite', min: 85, ru: 'Элитная' },
+  { id: 'gold', min: 80, ru: 'Золотая' },
+  { id: 'silver', min: 72, ru: 'Серебряная' },
+  { id: 'bronze', min: 65, ru: 'Бронзовая' },
+  { id: 'base', min: 0, ru: 'Обычная' },
+];
+export function tierOf(ovr: number): Tier {
+  return (TIERS.find((t) => ovr >= t.min) ?? TIERS[TIERS.length - 1]).id;
 }
-export const TIER_RU = { legend: 'Легенда', elite: 'Элита', gold: 'Золото', silver: 'Серебро', bronze: 'Бронза' };
+export const TIER_RU = Object.fromEntries(TIERS.map((t) => [t.id, t.ru])) as Record<Tier, string>;
 
 export function phaseLabel(L: League) {
   const khl = userLg(L) === 'KHL';

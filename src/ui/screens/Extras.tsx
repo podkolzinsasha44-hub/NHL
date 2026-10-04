@@ -13,7 +13,7 @@ import { isGM, lgOf, userTeam } from '../../engine/leagues';
 import { NATIONS } from '../../engine/intl';
 import { khlPlayoffResult } from '../../engine/khl';
 import { AWARD_NAMES } from '../../engine/awards';
-import { ATTR_RU, dateLong, money, POS_RU, seasonLabel, STATUS_RU } from '../format';
+import { ATTR_RU, dateLong, money, POS_RU, seasonLabel, STATUS_RU, TIERS, tierOf, type Tier } from '../format';
 import { GLOSSARY } from '../glossary';
 import { exportFile } from '../../persistence/db';
 import { careerSkater, statKey } from '../../engine/stats';
@@ -224,11 +224,17 @@ export function AlbumScreen() {
   const L = useL();
   const nav = useNav();
   const [sort, setSort] = useState<'ovr' | 'recent'>('ovr');
-  const list = L.album.map((id) => L.players[id]).filter(Boolean);
+  const [tier, setTier] = useState<Tier | 'all'>('all');
+  const all = L.album.map((id) => L.players[id]).filter(Boolean);
+  const list = tier === 'all' ? all : all.filter((p) => tierOf(p.ovr) === tier);
   const sorted = sort === 'ovr' ? [...list].sort((a, b) => Math.max(...b.hist.map((h) => h[1]), b.ovr) - Math.max(...a.hist.map((h) => h[1]), a.ovr)) : [...list].reverse();
+  const count = (t: Tier) => all.filter((p) => tierOf(p.ovr) === t).length;
   return (
     <Screen title="Альбом" subtitle="Все, кто играл за ваш клуб">
       <Chips value={sort} onChange={setSort} options={[{ v: 'ovr', label: 'Лучшие' }, { v: 'recent', label: 'Новые' }]} />
+      <div className="mt-2">
+        <Chips value={tier} onChange={setTier} options={[{ v: 'all' as const, label: `Все · ${all.length}` }, ...TIERS.filter((t) => count(t.id)).map((t) => ({ v: t.id, label: `${t.ru} · ${count(t.id)}` }))]} />
+      </div>
       <div className="grid grid-cols-3 gap-2 mt-3">
         {sorted.map((p) => <MiniCard key={p.id} p={p} L={L} onClick={() => nav.push('player', { id: p.id })} />)}
       </div>

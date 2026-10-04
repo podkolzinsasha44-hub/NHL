@@ -221,6 +221,98 @@ button {
   animation: spin 1s linear infinite;
 }
 
+/* ---------- Player card rarity effects ---------- */
+.card-foil {
+  background: conic-gradient(from var(--holo-angle, 0deg), #ff8ad8, #ffd36e, #9dffb0, #7fd3ff, #c59bff, #ff8ad8);
+  animation: holo 6s linear infinite;
+}
+.card-foil-fast {
+  animation-duration: 3.2s;
+}
+.card-rays {
+  position: absolute;
+  inset: -50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.09) 0deg 5deg, transparent 5deg 15deg);
+  animation: spin 48s linear infinite;
+  will-change: transform;
+}
+.card-aurora {
+  position: absolute;
+  inset: -45%;
+  background: conic-gradient(from 0deg, #ff5ec4, #ffd36e, #5effc8, #5ec8ff, #b45eff, #ff5ec4);
+  filter: blur(28px);
+  opacity: 0.42;
+  animation: spin 16s linear infinite;
+  will-change: transform;
+}
+.card-sparkles::before,
+.card-sparkles::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 18%, #fff, transparent),
+    radial-gradient(1.2px 1.2px at 78% 12%, #fff, transparent),
+    radial-gradient(1.8px 1.8px at 88% 38%, #fff8d6, transparent),
+    radial-gradient(1.2px 1.2px at 24% 52%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 64% 28%, #e8f7ff, transparent),
+    radial-gradient(1.2px 1.2px at 42% 8%, #fff, transparent),
+    radial-gradient(1.6px 1.6px at 92% 66%, #fff, transparent),
+    radial-gradient(1.2px 1.2px at 8% 72%, #ffe9fb, transparent);
+  animation: twinkle 2.6s ease-in-out infinite alternate;
+}
+.card-sparkles::after {
+  transform: translate(7%, 11%) scale(1.05);
+  animation-delay: -1.3s;
+  animation-duration: 3.4s;
+}
+@keyframes twinkle {
+  0% { opacity: 0.15; }
+  100% { opacity: 1; }
+}
+.card-aura {
+  position: absolute;
+  inset: -10px;
+  border-radius: 36px;
+  filter: blur(18px);
+  opacity: 0.55;
+  animation: aura 2.8s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+@keyframes aura {
+  from { opacity: 0.35; transform: scale(0.98); }
+  to { opacity: 0.85; transform: scale(1.03); }
+}
+.card-lines {
+  background-image: repeating-linear-gradient(135deg, rgba(255, 231, 163, 0.09) 0 1px, transparent 1px 9px);
+}
+.card-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.3px);
+  background-size: 9px 9px;
+}
+.shine-fast::after {
+  animation-duration: 2.8s;
+}
+.text-gradient-holo {
+  background: linear-gradient(180deg, #ffffff 0%, #ffe3f6 30%, #c8f0ff 62%, #ffe79a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.text-gradient-epic {
+  background: linear-gradient(180deg, #ffffff 0%, #f1c8ff 50%, #c77dff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.text-gradient-silver {
+  background: linear-gradient(180deg, #ffffff 0%, #d9e1ee 55%, #8f9bb0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
