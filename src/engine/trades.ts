@@ -1,6 +1,6 @@
 // Trades: asset valuation, AI decision-making, AI↔AI deals and offers to the user.
 import { autoLines, teamPower, validateLines } from './lines';
-import { beforeNewLeagueYear, capSpace, contractCount, salaryText, valueFor } from './contracts';
+import { beforeNewLeagueYear, capSpace, salaryText, valueFor } from './contracts';
 import { isGM, leagueTeams, lgOf, teamLg, userLg } from './leagues';
 import { hash01, next, pick, shuffle } from './rng';
 import { pushMsg, pushNews, social } from './news';
@@ -157,10 +157,7 @@ export function checkTrade(L: League, a: string, b: string, aGives: TradeAsset, 
   const bSpace = capSpace(L, b, season) + bOut - bIn;
   if (aSpace < 0) return { ok: false, reason: `${L.teams[a].short}: сделка не помещается под потолок (−${salaryText(-aSpace, lg)}).` };
   if (bSpace < 0) return { ok: false, reason: `${L.teams[b].short}: у них не хватает места под потолком (−${salaryText(-bSpace, lg)}).${lg === 'NHL' ? ' Попробуйте удержать часть зарплаты.' : ''}` };
-  const cnt = (t: string, inN: number, outN: number) => contractCount(L, t) + inN - outN;
-  const signed = (ids: number[]) => ids.filter((id) => L.players[id].c).length;
-  if (cnt(a, signed(bGives.players), signed(aGives.players)) > 50) return { ok: false, reason: `${L.teams[a].short}: превышен лимит 50 контрактов.` };
-  if (cnt(b, signed(aGives.players), signed(bGives.players)) > 50) return { ok: false, reason: `${L.teams[b].short}: превышен лимит 50 контрактов.` };
+  // The 50-contract limit does not block trades (house rule): a club may go over it via a trade.
   for (const [g, side] of [[aGives, a], [bGives, b]] as const) {
     const ret = Object.entries(g.retain ?? {}).filter(([, v]) => v > 0);
     if (ret.some(([, v]) => v > 0.5)) return { ok: false, reason: 'Удержать можно не больше 50% зарплаты.' };

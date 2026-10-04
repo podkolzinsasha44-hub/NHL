@@ -10,6 +10,8 @@ import { ownerReact } from '../src/engine/owner';
 import { isForeignFor, KHL_CLUBS } from '../src/engine/khlData';
 import { groupTable } from '../src/engine/intl';
 import { acceptProOffer } from '../src/engine/pro';
+import { checkTrade } from '../src/engine/trades';
+import { contractCount } from '../src/engine/contracts';
 import type { League, Player } from '../src/engine/types';
 
 const world: WorldJson = JSON.parse(fs.readFileSync('public/data/world.json', 'utf8'));
@@ -118,6 +120,21 @@ describe('career options', () => {
     M.owner.trust = 0;
     ownerReact(M);
     expect(M.gm.fired).toBe(true);
+  });
+
+  it('the 50-contract limit does not block trades', () => {
+    const L = newCareer(world, { team: 'CHI', gmName: 't', seed: 5, settings: { worldSize: 'compact' } });
+    // Fill the user club up to 50 contracts, then take two players for one.
+    const fa = Object.values(L.players).filter((p) => !p.team && p.st === 'FA');
+    for (const p of fa) {
+      if (contractCount(L, 'CHI') >= 50) break;
+      p.team = 'CHI'; p.st = 'AHL'; p.c = { aav: 850_000, last: L.season, type: 'STD', clause: null, exp: 'UFA' };
+    }
+    expect(contractCount(L, 'CHI')).toBe(50);
+    const give = Object.values(L.players).filter((p) => p.team === 'CHI' && p.st === 'AHL' && p.c && p.c.aav <= 900_000)[0];
+    const get = Object.values(L.players).filter((p) => p.team === 'SJS' && p.st === 'AHL' && p.c && p.c.aav <= 900_000).slice(0, 2);
+    const r = checkTrade(L, 'CHI', 'SJS', { players: [give.id], picks: [] }, { players: get.map((p) => p.id), picks: [] });
+    expect(r.ok, r.reason).toBe(true);
   });
 
   it('Russia and Belarus join IIHF tournaments only when allowed', () => {
