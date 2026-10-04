@@ -1,6 +1,8 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { Activity, memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion, useAnimate } from 'motion/react';
 import { useGame } from './store/game';
-import { useNav, type Tab } from './store/nav';
+import { TAB_ORDER, useNav, type Route, type Tab } from './store/nav';
+import { LayerCtx } from './store/layer';
 import { TabBar, Toasts } from './ui/components/shell';
 import { Menu } from './ui/screens/Menu';
 import { ROUTES, MODALS } from './ui/routes';
@@ -24,12 +26,7 @@ export default function App() {
 
 function GameShell() {
   const L = useGame((s) => s.L)!;
-  const tab = useNav((s) => s.tab);
-  const stack = useNav((s) => s.stacks[s.tab]);
-  const dir = useNav((s) => s.dir);
   const modal = useNav((s) => s.modal);
-  const route = stack[stack.length - 1];
-  const Comp = ROUTES[route.name] ?? ROUTES.office;
   const badges: Partial<Record<Tab, number>> = {
     office: unreadCount(L),
     market: L.offers.length || undefined,
@@ -40,21 +37,7 @@ function GameShell() {
   return (
     <>
       <div className="arena" data-mood={mood} />
-      <div className="fixed inset-0 overflow-hidden">
-        <AnimatePresence initial={false} custom={dir} mode="popLayout">
-          <motion.div
-            key={`${tab}-${route.key}`}
-            custom={dir}
-            className="absolute inset-0"
-            initial={{ x: dir > 0 ? '30%' : '-22%', opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: dir > 0 ? '-18%' : '30%', opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 42, mass: 0.9 }}
-          >
-            <Comp params={route.params ?? {}} />
-          </motion.div>
-        </AnimatePresence>
-      </div>
+      <Stage />
       <TabBar badges={badges} />
       <SimOverlay />
       <AnimatePresence>
@@ -75,3 +58,80 @@ function GameShell() {
     </>
   );
 }
+
+const SPRING = { type: 'spring', stiffness: 420, damping: 42, mass: 0.9 } as const;
+const NO_PARAMS: Record<string, unknown> = {};
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const enterFrom = (dir: number) => (dir > 0 ? '30%' : '-22%');
+const exitTo = (dir: number) => (dir > 0 ? '-18%' : '30%');
+
+/**
+ * All screens of every opened tab stay mounted; only the top of the current tab is visible.
+ * Switching tabs or going back therefore returns to a screen exactly as it was left: chosen
+ * segments, filters, typed text and scroll position. Subscribes to navigation only, so simulation
+ * ticks never re-render the hidden screens.
+ */
+const Stage = memo(function Stage() {
+  const tab = useNav((s) => s.tab);
+  const stacks = useNav((s) => s.stacks);
+  const seen = useNav((s) => s.seen);
+  const dir = useNav((s) => s.dir);
+  return (
+    <div className="fixed inset-0 overflow-hidden">
+      <AnimatePresence initial={false} custom={dir} presenceAffectsLayout={false}>
+        {TAB_ORDER.filter((t) => seen.includes(t)).flatMap((t) =>
+          stacks[t].map((route, depth) => (
+            <Layer key={`${t}-${route.key}`} route={route} depth={depth} visible={t === tab && depth === stacks[t].length - 1} />
+          )),
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
+
+const Layer = memo(function Layer({ route, depth, visible }: { route: Route; depth: number; visible: boolean }) {
+  const Comp = ROUTES[route.name] ?? ROUTES.office;
+  const [scope, animate] = useAnimate<HTMLDivElement>();
+  // A screen being covered (push, tab switch) stays visible while it slides away, then hides.
+  const [leaving, setLeaving] = useState(false);
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (wasVisible !== visible) {
+    setWasVisible(visible);
+    setLeaving(!visible);
+  }
+  const shown = useRef(visible);
+  useLayoutEffect(() => {
+    if (shown.current === visible || !scope.current) return;
+    shown.current = visible;
+    const dir = useNav.getState().dir;
+    const transition = reducedMotion() ? { duration: 0 } : SPRING;
+    if (visible) {
+      animate(scope.current, { x: [enterFrom(dir), '0%'], opacity: [0, 1] }, transition);
+      return;
+    }
+    let current = true;
+    animate(scope.current, { x: exitTo(dir), opacity: 0 }, transition).then(() => current && setLeaving(false));
+    return () => {
+      current = false;
+    };
+  }, [visible, animate, scope]);
+  const info = useMemo(() => ({ active: visible, depth }), [visible, depth]);
+  return (
+    <Activity mode={visible || leaving ? 'visible' : 'hidden'}>
+      <motion.div
+        ref={scope}
+        className="absolute inset-0"
+        style={{ zIndex: visible ? 1 : 0, pointerEvents: visible ? undefined : 'none' }}
+        initial={{ x: enterFrom(useNav.getState().dir), opacity: 0 }}
+        animate={{ x: '0%', opacity: 1 }}
+        variants={{ exit: (dir: number) => ({ x: exitTo(dir), opacity: 0 }) }}
+        exit="exit"
+        transition={SPRING}
+      >
+        <LayerCtx.Provider value={info}>
+          <Comp params={route.params ?? NO_PARAMS} />
+        </LayerCtx.Provider>
+      </motion.div>
+    </Activity>
+  );
+});

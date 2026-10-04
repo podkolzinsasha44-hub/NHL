@@ -10,11 +10,15 @@ export interface Route {
 const ROOT: Record<Tab, string> = { office: 'office', roster: 'roster', market: 'market', league: 'league', more: 'more' };
 let k = 1;
 const root = (t: Tab): Route[] => [{ name: ROOT[t], key: k++ }];
+const see = (seen: Tab[], t: Tab) => (seen.includes(t) ? seen : [...seen, t]);
+export const TAB_ORDER: Tab[] = ['office', 'roster', 'market', 'league', 'more'];
 
 interface NavState {
   tab: Tab;
   stacks: Record<Tab, Route[]>;
   dir: 1 | -1;
+  /** Tabs opened at least once this career: their screens stay mounted in the background. */
+  seen: Tab[];
   /** Full-screen modal route above everything (match, celebration, wrapped...). */
   modal: Route | null;
   push: (name: string, params?: Record<string, unknown>) => void;
@@ -30,6 +34,7 @@ export const useNav = create<NavState>((set, get) => ({
   tab: 'office',
   stacks: { office: root('office'), roster: root('roster'), market: root('market'), league: root('league'), more: root('more') },
   dir: 1,
+  seen: ['office'],
   modal: null,
   push: (name, params) => {
     const { tab, stacks } = get();
@@ -41,20 +46,20 @@ export const useNav = create<NavState>((set, get) => ({
     set({ dir: -1, stacks: { ...stacks, [tab]: stacks[tab].slice(0, -1) } });
   },
   setTab: (t) => {
-    const { tab, stacks } = get();
+    const { tab, stacks, seen } = get();
     if (t === tab) {
       // Tap on active tab → back to root
       set({ dir: -1, stacks: { ...stacks, [t]: stacks[t].slice(0, 1) } });
-    } else set({ tab: t, dir: 1 });
+    } else set({ tab: t, dir: 1, seen: see(seen, t) });
   },
   go: (t, name, params) => {
-    const { stacks } = get();
+    const { stacks, seen } = get();
     const base = stacks[t].slice(0, 1);
-    set({ tab: t, dir: 1, stacks: { ...stacks, [t]: name ? [...base, { name, params, key: k++ }] : base } });
+    set({ tab: t, dir: 1, seen: see(seen, t), stacks: { ...stacks, [t]: name ? [...base, { name, params, key: k++ }] : base } });
   },
   openModal: (name, params) => set({ modal: { name, params, key: k++ } }),
   closeModal: () => set({ modal: null }),
-  reset: () => set({ tab: 'office', modal: null, stacks: { office: root('office'), roster: root('roster'), market: root('market'), league: root('league'), more: root('more') } }),
+  reset: () => set({ tab: 'office', modal: null, seen: ['office'], stacks: { office: root('office'), roster: root('roster'), market: root('market'), league: root('league'), more: root('more') } }),
 }));
 
 export function currentRoute() {

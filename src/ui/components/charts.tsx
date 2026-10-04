@@ -1,6 +1,9 @@
 import { motion } from 'motion/react';
+import { useId } from 'react';
 
 export function Sparkline({ values, width = 120, height = 36, color = 'var(--accent)', labels }: { values: number[]; width?: number; height?: number; color?: string; labels?: string[] }) {
+  // Several screens stay mounted at once: SVG ids must be unique per instance.
+  const gid = `spk${useId().replace(/:/g, '')}`;
   if (values.length < 2) return <div className="text-muted text-[12px]">недостаточно данных</div>;
   const min = Math.min(...values) - 2, max = Math.max(...values) + 2;
   const pts = values.map((v, i) => [(i / (values.length - 1)) * (width - 8) + 4, height - 4 - ((v - min) / (max - min)) * (height - 8)]);
@@ -9,12 +12,12 @@ export function Sparkline({ values, width = 120, height = 36, color = 'var(--acc
   return (
     <svg width={width} height={height + (labels ? 14 : 0)} className="overflow-visible">
       <defs>
-        <linearGradient id="spk" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={color} stopOpacity="0.35" />
           <stop offset="1" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={area} fill="url(#spk)" />
+      <path d={area} fill={`url(#${gid})`} />
       <motion.path d={d} fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.9 }} />
       {pts.map((p, i) => (
         <g key={i}>

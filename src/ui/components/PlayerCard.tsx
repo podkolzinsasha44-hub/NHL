@@ -1,5 +1,5 @@
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { League, Player, Team } from '../../engine/types';
 import { potRange } from '../../engine/draft';
 import { ATTR_SHORT, flag, moneyOf, playerAge, POS_RU, tierOf, TIER_RU, TRAIT_RU, type Tier } from '../format';
@@ -244,7 +244,7 @@ function CardPhoto({ p, t, glow }: { p: Player; t: Team | null; glow: string }) 
 /** No photo: a player bust in the club's jersey with his number. */
 function JerseyBust({ p, t }: { p: Player; t: Team | null }) {
   const c1 = t?.primary ?? '#2b3a55', c2 = t?.secondary ?? '#ffffff', c3 = t?.accent ?? '#7fd3ff';
-  const id = `jb${p.id}`;
+  const id = `jb${p.id}${useId().replace(/:/g, '')}`;
   return (
     <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMax meet">
       <defs>

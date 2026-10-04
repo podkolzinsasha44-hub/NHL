@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNav, type Tab } from '../../store/nav';
+import { useLayer } from '../../store/layer';
 import { useGame } from '../../store/game';
 import { cx } from './kit';
 
@@ -39,10 +40,17 @@ export function Screen({
   title?: ReactNode; subtitle?: ReactNode; right?: ReactNode; children: ReactNode; back?: boolean; onBack?: () => void; className?: string; noPad?: boolean; large?: boolean; headerExtra?: ReactNode;
 }) {
   const pop = useNav((s) => s.pop);
-  const canBack = useNav((s) => s.stacks[s.tab].length > 1);
-  const showBack = back ?? canBack;
+  const { depth } = useLayer();
+  const showBack = back ?? depth > 0;
   const [scrolled, setScrolled] = useState(false);
   const touch = useRef<{ x: number; y: number } | null>(null);
+  // A hidden screen is display:none, which drops its scroll offset; put it back when shown again
+  // (an <Activity> re-runs layout effects on every reveal).
+  const main = useRef<HTMLElement>(null);
+  const offset = useRef(0);
+  useLayoutEffect(() => {
+    if (main.current && offset.current) main.current.scrollTop = offset.current;
+  }, []);
   return (
     <div
       className="absolute inset-0 flex flex-col"
@@ -75,7 +83,16 @@ export function Screen({
         </div>
         {headerExtra}
       </header>
-      <main className={cx('scroll flex-1', !noPad && 'px-4', className)} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 6)}>
+      <main
+        ref={main}
+        className={cx('scroll flex-1', !noPad && 'px-4', className)}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (!el.clientHeight) return; // hidden: keep the remembered offset
+          offset.current = el.scrollTop;
+          setScrolled(el.scrollTop > 6);
+        }}
+      >
         {large && (
           <div className="pt-1 pb-3">
             <div className="font-display uppercase text-[30px] leading-none tracking-wide">{title}</div>

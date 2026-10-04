@@ -5,6 +5,7 @@ import { newCareer } from '../engine/world';
 import { advanceDay, lastUserBox } from '../engine/season';
 import { saveLeague, loadLeague, requestPersistence } from '../persistence/db';
 import { useNav } from './nav';
+import { useLayer } from './layer';
 import { checkAchievements } from '../engine/achievements';
 import { isGM, userDeadline, userLg, userPhase, userTeam } from '../engine/leagues';
 import { initIntl } from '../engine/intl';
@@ -235,7 +236,13 @@ function migrate(L: League) {
 
 export { isGM };
 
+/**
+ * Current league, re-rendering on every simulation tick. Hidden screens (other tabs, screens under
+ * a pushed one) stay subscribed to nothing, so keeping them alive costs no time during simulation;
+ * they catch up the moment they are shown again.
+ */
 export function useL(): League {
-  useGame((s) => s.ver);
+  const { active } = useLayer();
+  useGame((s) => (active ? s.ver : -1));
   return useGame.getState().L!;
 }

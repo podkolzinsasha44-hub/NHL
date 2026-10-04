@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useGame } from '../../store/game';
 import { deleteSave, importFile, lastSaveId, listSaves, type SaveMeta } from '../../persistence/db';
 import { Button, Card, cx, Spinner } from '../components/kit';
@@ -120,16 +120,17 @@ export function Menu() {
 }
 
 export function CupMark({ size = 100 }: { size?: number }) {
+  const gid = `cupg${useId().replace(/:/g, '')}`;
   return (
     <svg width={size} height={size * 1.05} viewBox="300 160 424 560" className="relative drop-shadow-[0_10px_30px_rgba(232,194,106,0.35)]">
       <defs>
-        <linearGradient id="cupg" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#fff1c2" />
           <stop offset="0.45" stopColor="#e8c26a" />
           <stop offset="1" stopColor="#9c7425" />
         </linearGradient>
       </defs>
-      <g fill="url(#cupg)">
+      <g fill={`url(#${gid})`}>
         <ellipse cx="512" cy="200" rx="150" ry="34" />
         <path d="M362 200 Q372 300 470 330 L470 360 L554 360 L554 330 Q652 300 662 200 Z" />
         <rect x="440" y="360" width="144" height="40" rx="10" />

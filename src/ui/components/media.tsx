@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { League, Player } from '../../engine/types';
 import { flag, logoUrl } from '../format';
 import { KHL_BY_ID } from '../../engine/khlData';
@@ -10,15 +10,16 @@ function KhlCrest({ id, size, className }: { id: string; size: number; className
   const c = KHL_BY_ID[id];
   const txt = c.abbr;
   const fs = txt.length >= 4 ? 22 : txt.length === 3 ? 27 : txt.length === 2 ? 34 : 44;
+  const gid = `kc-${id}${useId().replace(/:/g, '')}`;
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" className={cx('shrink-0', className)} aria-label={c.name}>
       <defs>
-        <linearGradient id={`kc-${id}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={c.primary} />
           <stop offset="1" stopColor={`color-mix(in oklab, ${c.primary} 70%, #000)`} />
         </linearGradient>
       </defs>
-      <path d="M50 4 L88 16 V50 C88 72 72 88 50 96 C28 88 12 72 12 50 V16 Z" fill={`url(#kc-${id})`} stroke={c.secondary} strokeWidth="5" strokeLinejoin="round" />
+      <path d="M50 4 L88 16 V50 C88 72 72 88 50 96 C28 88 12 72 12 50 V16 Z" fill={`url(#${gid})`} stroke={c.secondary} strokeWidth="5" strokeLinejoin="round" />
       <path d="M22 30 H78" stroke={c.secondary} strokeWidth="3" opacity="0.55" />
       <text x="50" y="66" textAnchor="middle" fontSize={fs} fontFamily="Oswald Variable, Oswald, sans-serif" fontWeight="700" fill="#fff">{txt}</text>
     </svg>
@@ -50,16 +51,17 @@ export function TeamLogo({ id, size = 32, className }: { id: string; size?: numb
 
 export function Silhouette({ p, color = '#7fd3ff' }: { p: Player; color?: string }) {
   const initials = `${p.fn[0] ?? ''}${p.ln[0] ?? ''}`;
+  const gid = `sil${p.id}${useId().replace(/:/g, '')}`;
   return (
     <svg viewBox="0 0 100 100" className="w-full h-full">
       <defs>
-        <linearGradient id={`sil${p.id}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={color} stopOpacity="0.55" />
           <stop offset="1" stopColor={color} stopOpacity="0.12" />
         </linearGradient>
       </defs>
-      <circle cx="50" cy="36" r="17" fill={`url(#sil${p.id})`} />
-      <path d="M14 100 C16 70 32 58 50 58 C68 58 84 70 86 100 Z" fill={`url(#sil${p.id})`} />
+      <circle cx="50" cy="36" r="17" fill={`url(#${gid})`} />
+      <path d="M14 100 C16 70 32 58 50 58 C68 58 84 70 86 100 Z" fill={`url(#${gid})`} />
       <text x="50" y="41" textAnchor="middle" fontSize="13" fontFamily="Oswald Variable, Oswald, sans-serif" fontWeight="600" fill="white" fillOpacity="0.85">
         {initials}
       </text>
