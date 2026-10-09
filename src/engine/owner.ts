@@ -4,6 +4,8 @@ import { shuffle } from './rng';
 import type { League, OwnerState } from './types';
 import { CUP_RU, leagueTeams, lgOf } from './leagues';
 import { clamp } from './util';
+import { closeFinanceSeason } from './finance';
+import { salaryText } from './contracts';
 
 export function ownerGoalFor(L: League, teamId: string): { goal: OwnerState['goal']; text: string } {
   const lg = lgOf(L.teams[teamId]);
@@ -30,6 +32,18 @@ export function evaluateSeason(L: League, playoffRound: number, pointsNow: numbe
   else if (o.goal === 'develop') delta = 6 + (playoffRound >= 1 ? 8 : 0);
   else delta = (playoffRound - need[o.goal]) * 12 + (playoffRound >= need[o.goal] ? 8 : -6);
   if (playoffRound === 5) delta += 30;
+  // Club finances: big-market owners expect a profit, KHL owners want the budget kept.
+  const fin = closeFinanceSeason(L);
+  if (fin) {
+    delta += fin.delta;
+    const lg = lgOf(L.teams[L.user]);
+    pushMsg(L, {
+      from: `${o.name}, владелец`, kind: 'owner',
+      title: `Финансы сезона: ${fin.profit >= 0 ? 'прибыль' : 'убыток'} ${salaryText(Math.abs(fin.profit), lg)}`,
+      body: `${fin.delta > 0 ? 'Бухгалтерия довольна' : fin.delta < 0 ? 'Цифры меня не радуют' : 'Бюджет в рамках ожиданий'}${fin.delta ? ` (доверие ${fin.delta > 0 ? '+' : ''}${fin.delta})` : ''}. Подробности — в разделе «Финансы».`,
+      ref: { type: 'screen', id: 'finance' },
+    });
+  }
   // Difficulty: owners are harsher on Hardcore
   let mul = L.settings.difficulty === 'rookie' ? 0.6 : L.settings.difficulty === 'hard' ? 1.3 : 1;
   // Big hockey markets: the media and fans push the owner harder.

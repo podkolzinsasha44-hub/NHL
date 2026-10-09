@@ -1,3 +1,4 @@
+import { ensureFin } from './finance';
 import { COACH_FIRST, COACH_LAST, OWNER_NAMES } from './names';
 import { personality, devType } from './gen';
 import { autoLines, emptyLines, teamPower } from './lines';
@@ -78,7 +79,7 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
   const season = world.meta.season;
   const start = world.meta.seasonStart;
   const L: League = {
-    v: 1,
+    v: 2,
     seed,
     rng: getState(),
     season,
@@ -198,6 +199,8 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
   }
   updateStrategies(L);
   initIntl(L, o.nation);
+  L.supercup = { next: null, history: [] };
+  L.hof = [];
   if (!isGM(L)) {
     L.rng = getState();
     return L;
@@ -214,6 +217,7 @@ export function newCareer(world: WorldJson, o: NewCareerOpts): League {
     { name: `${pick(COACH_FIRST)} ${pick(COACH_LAST)}`, region: 'USA', skill: int(55, 80) },
   ];
   const ut = L.teams[L.user];
+  ensureFin(L);
   for (const p of Object.values(L.players)) if (p.team === L.user) L.album.push(p.id);
   pushMsg(L, {
     from: `${L.owner.name}, владелец`,

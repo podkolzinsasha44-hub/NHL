@@ -391,10 +391,13 @@ export function proDaily(L: League) {
     L.flags[`procup${L.season}`] = true;
     unlock(L, 'pro_cup');
   }
-  if (p.awards.some((a) => !a.startsWith('potm') && !a.startsWith('khl-cup'))) unlock(L, 'pro_award');
+  if (p.awards.some((a) => !TEAM_TITLES.has(a.split(':')[0]))) unlock(L, 'pro_award');
   // Late career: the body says when.
   if (ageOn(p.bd, L.date) >= 42 && L.date.slice(5) === '07-02') retirePro(L);
 }
+
+/** Team titles and monthly honours do not count as individual awards. */
+const TEAM_TITLES = new Set(['potm', 'khl-cup', 'cup', 'vc', 'hof']);
 
 // ---------- Farm games ----------
 

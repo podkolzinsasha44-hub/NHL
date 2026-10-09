@@ -20,8 +20,7 @@ import { careerSkater, statKey } from '../../engine/stats';
 import type { SkaterLine } from '../../engine/types';
 import { CupMark } from './Menu';
 import { chime, horn } from '../sound';
-import { ownerGoalFor } from '../../engine/owner';
-import { autoLines } from '../../engine/lines';
+import { declineCall, takeJob } from '../../engine/careers';
 import { ageOn } from '../../engine/util';
 
 export function CareerScreen() {
@@ -37,15 +36,7 @@ export function CareerScreen() {
           <div className="flex flex-col gap-2 mt-3">
             {L.gm.offers?.map((t) => (
               <Button key={t} variant="primary" full onClick={() => {
-                act((L) => {
-                  L.user = t;
-                  L.gm.fired = false;
-                  L.gm.offers = [];
-                  L.gm.hiredSeason = L.season;
-                  const g = ownerGoalFor(L, t);
-                  L.owner = { ...L.owner, trust: 55, warnings: 0, goal: g.goal, goalText: g.text };
-                  autoLines(L, L.teams[t]);
-                });
+                act((L) => takeJob(L, t));
                 toast(`Вы — новый GM ${L.teams[t].name}`, 'good');
                 applyTheme(useGame.getState().L);
                 useNav.getState().reset();
@@ -54,6 +45,28 @@ export function CareerScreen() {
           </div>
         </Card>
       )}
+      {!L.gm.fired && (L.gm.calls ?? []).filter((c) => c.until >= L.date).map((c) => (
+        <Card key={c.team} className="mb-3 border-[var(--accent)]">
+          <div className="flex items-center gap-3">
+            <TeamLogo id={c.team} size={44} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] uppercase text-muted">Предложение о работе · до {dateLong(c.until)}</div>
+              <div className="font-display uppercase text-[18px] truncate">{L.teams[c.team]?.name}</div>
+            </div>
+          </div>
+          <div className="text-[13px] text-muted mt-2">{c.note}</div>
+          <div className="flex gap-2 mt-3">
+            <Button full variant="primary" onClick={() => {
+              if (!confirm(`Перейти в ${L.teams[c.team]?.name}? Текущий клуб останется под управлением ИИ.`)) return;
+              act((L) => takeJob(L, c.team));
+              toast(`Вы — новый GM ${L.teams[c.team].name}`, 'good');
+              applyTheme(useGame.getState().L);
+              useNav.getState().reset();
+            }}>Принять</Button>
+            <Button full onClick={() => act((L) => declineCall(L, c.team))}>Остаться</Button>
+          </div>
+        </Card>
+      ))}
       <Card>
         <div className="text-[11px] uppercase text-muted">Владелец · {o.name}</div>
         <div className="flex items-end gap-2 mt-1"><div className="num text-[40px] leading-none">{o.trust}</div><div className="text-muted mb-1">/ 100 доверия</div></div>
@@ -71,7 +84,7 @@ export function CareerScreen() {
       {L.gm.history.length ? (
         <Card pad={false}>
           {L.gm.history.slice().reverse().map((h, i) => (
-            <div key={h.season} className={cx('flex items-center gap-3 px-4 h-12', i && 'border-t hairline')}>
+            <div key={i} className={cx('flex items-center gap-3 px-4 h-12', i && 'border-t hairline')}>
               <span className="num w-16">{seasonLabel(h.season)}</span>
               <TeamLogo id={h.team} size={24} />
               <span className={cx('flex-1 text-[14px]', h.result.includes('КУБОК') && 'text-gold font-semibold')}>{h.result}</span>

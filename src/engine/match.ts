@@ -195,6 +195,8 @@ export interface MatchOpts {
   b2bAway?: boolean;
   goalieHome?: number;
   goalieAway?: number;
+  /** Neutral ice (one-off cup games abroad): no home advantage for either side. */
+  neutral?: boolean;
 }
 
 export interface MatchBox {
@@ -223,7 +225,7 @@ export function simulateMatch(L: League, home: Team, away: Team, o: MatchOpts = 
   const talent = playoff ? 0.74 : 1;
   const styleShot = o.style?.shot ?? 1, styleFin = o.style?.fin ?? 1;
   const shot = (att: Side, dfn: Side, u: Unit, opp: Unit, t: number, period: number, kind: 'EV' | 'PP' | 'SH' | '3v3', base: number, pBase: number) => {
-    const n = poisson(base * styleShot * Math.exp((K.KS * talent * (u.off - opp.def)) / 10) * (att.home ? K.HOME : 1));
+    const n = poisson(base * styleShot * Math.exp((K.KS * talent * (u.off - opp.def)) / 10) * (att.home && !o.neutral ? K.HOME : 1));
     for (let i = 0; i < n; i++) {
       const shooter = pickWeighted(u.sk, 'sw');
       att.shots++;

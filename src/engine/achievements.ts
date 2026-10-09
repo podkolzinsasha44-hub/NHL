@@ -38,6 +38,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'draft_star', title: 'Глаз-алмаз', desc: 'Задрафтованный вами игрок достигает рейтинга 85', icon: '💎' },
   { id: 'gagarin', title: 'Кубок Гагарина', desc: 'Выиграйте Кубок Гагарина как GM клуба КХЛ', icon: '🏆' },
   { id: 'two_leagues', title: 'Две лиги', desc: 'Поработайте генеральным менеджером и в НХЛ, и в КХЛ', icon: '🌍' },
+  { id: 'victoria', title: 'Кубок Виктории', desc: 'Выиграйте Кубок Виктории — матч чемпионов НХЛ и КХЛ', icon: '🌍' },
+  { id: 'promotion', title: 'Путь наверх', desc: 'Примите приглашение клуба НХЛ, работая в КХЛ', icon: '✈️' },
+  { id: 'full_house', title: 'Аншлаг', desc: 'Продайте все билеты на 80% домашних матчей регулярки', icon: '🎟️' },
+  { id: 'tycoon', title: 'Бизнесмен', desc: 'Заработайте клубу $50M прибыли за сезон (в КХЛ — ₽300 млн)', icon: '💼' },
+  { id: 'hof', title: 'Легенда клуба', desc: 'Игрок, выступавший за ваш клуб, введён в Зал славы', icon: '🏛️' },
   { id: 'intl_gold', title: 'Золото сборной', desc: 'Выиграйте чемпионат мира или Олимпиаду как тренер сборной', icon: '🥇', mode: 'all' },
   // Player career
   { id: 'pro_debut', title: 'Первый матч', desc: 'Сыграйте первый матч на профессиональном уровне', icon: '🏒', mode: 'player' },
@@ -49,6 +54,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'pro_gold', title: 'Чемпион мира', desc: 'Выиграйте золото чемпионата мира или Олимпиады', icon: '🥇', mode: 'player' },
   { id: 'pro_gagarin', title: 'Кубок Гагарина', desc: 'Выиграйте Кубок Гагарина как игрок', icon: '🏆', mode: 'player' },
   { id: 'pro_cup', title: 'Имя на Кубке', desc: 'Выиграйте Кубок Стэнли как игрок', icon: '🏆', mode: 'player' },
+  { id: 'pro_victoria', title: 'Лучшие в мире', desc: 'Выиграйте Кубок Виктории как игрок', icon: '🌍', mode: 'player' },
   { id: 'pro_award', title: 'Индивидуальный приз', desc: 'Получите индивидуальную награду лиги', icon: '🎖️', mode: 'player' },
 ];
 

@@ -15,6 +15,7 @@ import { addDays, ageOn, clamp } from './util';
 import { isKhlGM, leagueTeams, userLg } from './leagues';
 import { evaluateSeason, ownerReact } from './owner';
 import { checkAchievements } from './achievements';
+import { jobCalls } from './careers';
 import { KHL_CHAMPION_2026, KHL_CLUBS, KHL_GAMES, type KhlClub } from './khlData';
 
 function khlContract(L: League, p: Player, years?: number) {
@@ -343,7 +344,7 @@ function khlSeasonEnd(L: League, champ: string, finalist: string, score: string)
     season: L.season, champion: champ, finalist, regular: st[0].id,
     topScorer: top ? { id: top.id, name: `${top.fn} ${top.ln}`, pts: tv } : undefined,
     mvp: mvp?.id,
-    standings: st.map((t) => ({ id: t.id, pts: t.rec.pts })),
+    standings: st.map((t) => ({ id: t.id, pts: t.rec.pts, w: t.rec.w })),
   });
   for (const t of leagueTeams(L, 'KHL')) t.last = { w: t.rec.w, l: t.rec.l, otl: t.rec.otl, pts: t.rec.pts, gf: t.rec.gf, ga: t.rec.ga };
   L.stops.push('khl-season-end');
@@ -373,6 +374,7 @@ function reviewKhlGM(L: League) {
   });
   checkAchievements(L);
   ownerReact(L);
+  jobCalls(L, result);
 }
 
 /** Every summer each club promotes two or three juniors from its academy (MHL) to the VHL farm. */

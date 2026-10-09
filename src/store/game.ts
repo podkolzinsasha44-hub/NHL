@@ -3,13 +3,12 @@ import type { Game, League } from '../engine/types';
 import type { WorldJson, NewCareerOpts } from '../engine/world';
 import { newCareer } from '../engine/world';
 import { advanceDay, lastUserBox } from '../engine/season';
-import { saveLeague, loadLeague, requestPersistence } from '../persistence/db';
+import { backupSave, saveLeague, loadLeague, requestPersistence } from '../persistence/db';
 import { useNav } from './nav';
 import { useLayer } from './layer';
 import { checkAchievements } from '../engine/achievements';
 import { isGM, userDeadline, userLg, userPhase, userTeam } from '../engine/leagues';
-import { initIntl } from '../engine/intl';
-import { getState, useState_ } from '../engine/rng';
+import { migrate, SAVE_VERSION } from '../engine/migrate';
 import { setMoneyLeague } from '../ui/format';
 
 export type SimMode = 'day' | 'game' | 'week' | 'event' | 'deadline' | 'regular' | 'season' | 'date';
@@ -54,8 +53,8 @@ interface GameState {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let toastId = 1;
 
-const ALWAYS = new Set(['playoffs', 'cup', 'champion', 'draft', 'fa', 'expiring', 'camp', 'regular-end', 'intl-select', 'intl-call', 'pro-offer', 'pro-drafted', 'pro-traded']);
-const EVENT = new Set([...ALWAYS, 'deadline', 'offer', 'injury', 'eliminated', 'series-won', 'fa-day1', 'intl-final']);
+const ALWAYS = new Set(['playoffs', 'cup', 'champion', 'draft', 'fa', 'expiring', 'camp', 'regular-end', 'intl-select', 'intl-call', 'pro-offer', 'pro-drafted', 'pro-traded', 'job-offer', 'victoria-eve']);
+const EVENT = new Set([...ALWAYS, 'deadline', 'offer', 'injury', 'eliminated', 'series-won', 'fa-day1', 'intl-final', 'victoria']);
 
 export function applyTheme(L: League | null) {
   const root = document.documentElement;
@@ -105,6 +104,8 @@ export const useGame = create<GameState>((set, get) => ({
       set({ loading: false });
       return false;
     }
+    // First open after an update: keep an untouched copy of the career before migrating it.
+    if ((L.v ?? 1) < SAVE_VERSION && !id.startsWith('backup-')) await backupSave(id, L).catch((e: unknown) => console.warn('backup failed', e));
     migrate(L);
     applyTheme(L);
     useNav.getState().reset();
@@ -210,28 +211,15 @@ function onStop(reason: string | null, mode: SimMode, watch = false) {
     return;
   }
   if (reason === 'intl-select' || reason === 'intl-call' || reason === 'intl-final') return nav.go('more', 'intl');
+  if (reason === 'job-offer') return nav.go('more', 'career');
+  if (reason === 'victoria-eve') return nav.go('office');
+  if (reason === 'victoria' && lastUserBox) return nav.openModal('match', { live: watch || L.settings.watchGames, id: lastUserBox.game.id });
   if (reason === 'pro-offer' || reason === 'pro-drafted' || reason === 'pro-traded') return nav.go(reason === 'pro-offer' ? 'market' : 'office');
   if (reason === 'draft') return nav.go('more', 'draftRoom');
   if (reason === 'fa' || reason === 'fa-day1') return nav.go('market', 'market', { tab: 'fa' });
   if (reason === 'expiring') return nav.go('market', 'market', { tab: 'ext' });
   if (reason === 'playoffs') return nav.go('league', 'playoffs', { lg: khl ? 'KHL' : 'NHL' });
   if (mode === 'game' && (watch || L.settings.watchGames) && lastUserBox) nav.openModal('match', { live: true, id: lastUserBox.game.id });
-}
-
-/** Fills fields added in later versions. */
-function migrate(L: League) {
-  L.dead ??= [];
-  L.lotteryWins ??= {};
-  L.flags ??= {};
-  L.album ??= [];
-  L.watch ??= [];
-  L.mode ??= 'gm';
-  // Careers started before national teams existed get them now (the KHL joins on the next July 1).
-  if (!L.intl) {
-    useState_(L.rng);
-    initIntl(L);
-    L.rng = getState();
-  }
 }
 
 export { isGM };

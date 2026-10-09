@@ -185,6 +185,8 @@ export interface Team {
   cups: number;
   /** Retired numbers [num, playerName, season]. */
   retired: [number, string, number][];
+  /** Victoria Cups won. */
+  vc?: number;
   /** Season-long revenue proxy */
   budget: number;
   custom?: boolean;
@@ -208,6 +210,10 @@ export interface Game {
   /** Playoff series id */
   series?: string;
   special?: 'classic' | 'allstar' | 'stadium';
+  /** One-off cup game outside the league calendar (the Victoria Cup between the two champions). */
+  cup?: 'victoria';
+  /** Attendance (home games of the user's club and cup games). */
+  att?: number;
 }
 
 export interface PlayoffSeries {
@@ -350,7 +356,7 @@ export interface SeasonSummary {
   presidents: string;
   awards: Record<string, number>;
   userRecord: { w: number; l: number; otl: number; pts: number; place: number; playoffRound: number };
-  standings: { id: string; pts: number }[];
+  standings: { id: string; pts: number; w?: number }[];
   topScorer?: { id: number; name: string; pts: number };
   conn?: number;
 }
@@ -373,6 +379,17 @@ export interface GMState {
   history: { season: number; team: string; result: string }[];
   fired: boolean;
   offers?: string[]; // teams offering a job after being fired
+  /** Job offers from other clubs while employed (summer, after a strong season). */
+  calls?: JobOffer[];
+  /** Date of the last team meeting. */
+  meeting?: string;
+}
+
+export interface JobOffer {
+  team: string;
+  /** Last day to answer. */
+  until: string;
+  note: string;
 }
 
 export interface Settings {
@@ -514,6 +531,68 @@ export interface IntlState {
   nextGameId: number;
 }
 
+/** One season of the user's club finances (reference model: real club books are not public). */
+export interface FinanceLine {
+  season: number;
+  team: string;
+  /** Revenue: tickets, food & merchandise at the arena, media rights, sponsors, playoff gates & prizes. */
+  gate: number;
+  extra: number;
+  media: number;
+  sponsor: number;
+  playoff: number;
+  /** Expenses: player salaries, coaches & club services, arena & travel, fan events. */
+  payroll: number;
+  staff: number;
+  ops: number;
+  events: number;
+  homeGames: number;
+  /** Total attendance of regular-season home games and the number of sellouts. */
+  att: number;
+  sellouts: number;
+}
+export interface FinanceState {
+  /** Ticket price level −2..+2 (×0.7 … ×1.3 of the club's base price). */
+  price: number;
+  cur: FinanceLine;
+  hist: FinanceLine[];
+  /** Recent home games of the user's club: [date, attendance, capacity]. */
+  games: [string, number, number][];
+  /** Date of the last fan event. */
+  promo?: string;
+}
+
+/** Victoria Cup: the Stanley Cup champion meets the Gagarin Cup champion in Europe in early October. */
+export interface SuperCupGame {
+  season: number;
+  day: string;
+  nhl: string;
+  khl: string;
+  venue: string;
+  hs?: number;
+  as?: number;
+  ot?: 'OT' | 'SO' | null;
+  winner?: string;
+  mvp?: number;
+  gameId?: number;
+  att?: number;
+}
+export interface SuperCupState {
+  next: SuperCupGame | null;
+  history: SuperCupGame[];
+}
+
+/** Hall of Fame member (inducted in the game world). */
+export interface HallEntry {
+  id: number;
+  name: string;
+  pos: Pos;
+  ctry: string;
+  year: number;
+  team: string | null;
+  line: string;
+}
+
 export interface League {
   v: number;
   /** 'gm' (default): the user runs `user` club. 'player': the user is `pro.pid`, `user` is ''. */
@@ -573,6 +652,12 @@ export interface League {
   /** Regular-season schedule template: [dayOffset, home, away]. */
   tmpl: [number, string, string][];
   seasonLog: { trades: number; signings: number; spent: number; bestTrade?: number; userGames: { w: number; l: number } };
+  /** Club finances of the user's club (GM careers). */
+  fin?: FinanceState;
+  /** Victoria Cup between the champions of the NHL and the KHL. */
+  supercup?: SuperCupState;
+  /** Hall of Fame inductees, newest first. */
+  hof?: HallEntry[];
 }
 
 export interface GameEvent {

@@ -50,7 +50,7 @@ export function seasonOdds(L: League, n = 400): Record<string, Odds> {
   const teams = leagueTeams(L, 'NHL');
   const res: Record<string, Odds> = {};
   for (const t of teams) res[t.id] = { po: 0, cup: 0, pts: 0, final: 0 };
-  const remaining = L.phase === 'regular' || L.phase === 'preseason' ? L.games.filter((g) => !g.played && !g.series && !g.lg) : [];
+  const remaining = L.phase === 'regular' || L.phase === 'preseason' ? L.games.filter((g) => !g.played && !g.series && !g.lg && !g.cup) : [];
   const inPlayoffs = L.phase === 'playoffs' && L.playoffs;
   for (let s = 0; s < n; s++) {
     const pts: Record<string, number> = {};

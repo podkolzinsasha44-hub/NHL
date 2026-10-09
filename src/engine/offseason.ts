@@ -24,6 +24,9 @@ import { buildSeasonGames, pickCaptain } from './world';
 import { updateStrategies } from './ai';
 import { regradeTrades, weeklyTradeActivity } from './trades';
 import { checkAchievements } from './achievements';
+import { expireCalls, jobCalls } from './careers';
+import { scheduleSuperCup } from './supercup';
+import { inductHall } from './hall';
 
 const md = (L: League) => L.date.slice(5);
 
@@ -113,6 +116,11 @@ function postSeason(L: League) {
     const vv = v * (p.team === champ.id ? 1 : 0.7);
     if (vv > cv) { cv = vv; conn = p; }
   }
+  // Names on the Cup: every champion player who played in these playoffs.
+  for (const id in L.players) {
+    const p = L.players[id];
+    if (p.team === champ.id && p.stats[pk]) p.awards.push(`cup:${L.season}`);
+  }
   const awards = computeAwards(L);
   if (conn) awards.conn = conn.id;
   announceAwards(L, awards);
@@ -160,7 +168,7 @@ function postSeason(L: League) {
     presidents: st[0].id,
     awards,
     userRecord: ut ? { w: ut.rec.w, l: ut.rec.l, otl: ut.rec.otl, pts: ut.rec.pts, place, playoffRound: result } : { w: 0, l: 0, otl: 0, pts: 0, place: 0, playoffRound: 0 },
-    standings: st.map((t) => ({ id: t.id, pts: t.rec.pts })),
+    standings: st.map((t) => ({ id: t.id, pts: t.rec.pts, w: t.rec.w })),
     topScorer: top ? { id: top.id, name: `${top.fn} ${top.ln}`, pts: (top.stats[statKey(L.season, false)] as SkaterLine).pts } : undefined,
     conn: conn?.id,
   });
@@ -169,7 +177,10 @@ function postSeason(L: League) {
   retirements(L);
   regradeTrades(L);
   checkAchievements(L);
-  if (nhlGM) ownerReact(L);
+  if (nhlGM) {
+    ownerReact(L);
+    jobCalls(L, result);
+  }
   L.phase = 'offseason';
 }
 
@@ -301,6 +312,8 @@ function newLeagueYear(L: League) {
   buildSeasonGames(L, start, L.season % 2 === 1);
   buildKhlSeason(L);
   applyOlympicBreak(L);
+  scheduleSuperCup(L);
+  inductHall(L);
   L.deadline = (() => {
     const yy = L.season + 1;
     for (let d = 1; d <= 7; d++) {
@@ -317,6 +330,7 @@ function newLeagueYear(L: League) {
 }
 
 function camp(L: League) {
+  expireCalls(L);
   trainingCamp(L);
   replenishPool(L);
   khlYouthIntake(L);
@@ -356,7 +370,7 @@ export function aiCapCompliance(L: League, floor = true, only?: LeagueId) {
     }
     // Still over: buy out the worst value contract (KHL: terminate it, at any time of year)
     let cut = 0;
-    while ((floor || khl) && capSpace(L, t.id) < 0 && cut++ < (khl ? 3 : 1)) {
+    while ((floor || khl) && capSpace(L, t.id) < 0 && cut++ < (khl ? 3 : 2)) {
       const worst = Object.values(L.players)
         .filter((p) => p.team === t.id && p.c && p.c.clause !== 'NMC' && p.c.type !== 'ELC' && p.id !== L.pro?.pid)
         .sort((a, b) => (b.c!.aav - valueFor(L, b, t.id)) - (a.c!.aav - valueFor(L, a, t.id)))[0];

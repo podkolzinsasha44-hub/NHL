@@ -13,6 +13,13 @@ import { useGame } from './store/game';
 import { useNav } from './store/nav';
 (window as unknown as { __nhl: unknown }).__nhl = { game: useGame, nav: useNav };
 
+// iOS may close a home-screen app in the background without warning: save when it is hidden.
+const saveNow = () => void useGame.getState().save();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveNow();
+});
+window.addEventListener('pagehide', saveNow);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -22,6 +22,9 @@ export const AWARD_NAMES: Record<string, string> = {
   'khl-pts': 'Лучший бомбардир КХЛ',
   'wc-mvp': 'MVP чемпионата мира',
   'og-mvp': 'MVP Олимпиады',
+  vc: 'Кубок Виктории',
+  'vc-mvp': 'MVP Кубка Виктории',
+  hof: 'Зал славы',
 };
 
 export function isRookie(p: Player, season: number) {

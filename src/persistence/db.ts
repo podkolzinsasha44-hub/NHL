@@ -58,6 +58,31 @@ export async function saveLeague(id: string, L: League) {
   setLast(id);
 }
 
+/**
+ * Untouched copy of a career made before an update migrates it. It shows up in the save list
+ * ("🛟 копия") and can be opened like any career; the original keeps its id.
+ */
+export async function backupSave(id: string, L: League) {
+  const bid = `backup-v${L.v ?? 1}-${id}`;
+  if (await db.blobs.get(bid)) return;
+  const meta = await db.saves.get(id);
+  await db.transaction('rw', db.saves, db.blobs, async () => {
+    await db.blobs.put({ id: bid, data: L });
+    await db.saves.put({
+      id: bid,
+      name: `🛟 Копия до обновления · ${meta?.name ?? L.gm.name}`,
+      team: meta?.team ?? L.user,
+      season: L.season,
+      date: L.date,
+      // Listed below the career itself.
+      updated: (meta?.updated ?? Date.now()) - 1,
+      ironman: L.settings.ironman,
+    });
+  });
+}
+
+export const isBackup = (id: string) => id.startsWith('backup-');
+
 export async function loadLeague(id: string): Promise<League | null> {
   const b = await db.blobs.get(id);
   if (b) setLast(id);

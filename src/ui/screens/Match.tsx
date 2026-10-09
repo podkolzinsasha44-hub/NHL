@@ -61,7 +61,7 @@ export function MatchScreen({ params }: { params: Record<string, unknown> }) {
       <div className="arena" style={{ position: 'absolute' }} />
       <div className="relative pt-safe flex items-center h-14 px-2 z-10">
         <button onClick={close} className="press w-11 h-11 rounded-full flex items-center justify-center" aria-label="Закрыть"><Icon name="close" /></button>
-        <div className="flex-1 text-center font-display uppercase tracking-widest text-[13px] text-muted">{g.series ? 'Плей-офф' : g.special === 'classic' ? 'Winter Classic' : 'Матч-центр'} · {dateLong(g.day)}</div>
+        <div className="flex-1 text-center font-display uppercase tracking-widest text-[13px] text-muted">{g.cup === 'victoria' ? 'Кубок Виктории' : g.series ? 'Плей-офф' : g.special === 'classic' ? 'Winter Classic' : 'Матч-центр'} · {dateLong(g.day)}</div>
         <div className="w-11" />
       </div>
       {/* Scoreboard */}

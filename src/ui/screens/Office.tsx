@@ -21,6 +21,7 @@ import { NewsItem } from './News';
 import { Term } from '../components/Term';
 import type { Message } from '../../engine/types';
 import { MessageView } from './Inbox';
+import { userSuperCup } from '../../engine/supercup';
 
 export function Office() {
   const L = useL();
@@ -36,6 +37,7 @@ export function Office() {
   const [msg, setMsg] = useState<Message | null>(null);
   const lastGame = L.lastUserGame ? L.games.find((g) => g.id === L.lastUserGame && g.played) : null;
   const my = odds?.[L.user];
+  const vc = userSuperCup(L);
   useEffect(() => {
     if (!my || ph !== 'regular') return;
     const h = L.oddsHist ?? [];
@@ -76,6 +78,20 @@ export function Office() {
         <NextGameCard />
       ) : (
         <PhaseCard />
+      )}
+
+      {vc && (
+        <Card className="mt-3 border-gold/40">
+          <div className="flex items-center gap-3">
+            <div className="text-[34px]">🌍</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] uppercase tracking-wider text-gold">Кубок Виктории · {dateLong(vc.day)} · {vc.venue}</div>
+              <div className="font-display uppercase text-[17px] truncate">{L.teams[vc.nhl]?.short} — {L.teams[vc.khl]?.short}</div>
+              <div className="text-[12px] text-muted">Матч чемпионов НХЛ и КХЛ, нейтральный лёд</div>
+            </div>
+          </div>
+          <Button size="sm" full className="mt-3" onClick={() => useGame.getState().simulate('game', undefined, { watch: true })} icon={<Icon name="eye" size={16} />}>{vc.day === L.date ? 'Смотреть матч' : 'К матчу'}</Button>
+        </Card>
       )}
 
       {/* Projections */}
@@ -150,7 +166,7 @@ export function Office() {
           <div className="num text-[24px] leading-tight">{L.owner.trust}<span className="text-[13px] text-muted">/100</span></div>
           <Meter value={L.owner.trust} className="mt-1.5" color={L.owner.trust < 30 ? '#ff5a5f' : L.owner.trust < 55 ? '#ffb547' : '#3ddc97'} />
           <div className="text-[11.5px] text-muted mt-1.5 line-clamp-2">{L.owner.goalText}</div>
-          <div className="text-[11.5px] text-muted mt-1">Трибуны: {Math.round(70 + t.fans * 0.3)}% · {t.fans >= 70 ? '🔥 аншлаги' : t.fans >= 45 ? 'спокойно' : '😠 свист'}</div>
+          <div className="text-[11.5px] text-muted mt-1">Болельщики: {Math.round(t.fans)} · {t.fans >= 70 ? '🔥 аншлаги' : t.fans >= 45 ? 'спокойно' : '😠 свист'}</div>
         </Card>
         <Card onClick={() => nav.go('more', 'finance')}>
           <div className="text-[11px] uppercase tracking-wider text-muted"><Term k="cap">Под потолком</Term></div>

@@ -14,6 +14,7 @@ import { teamPower } from '../../engine/lines';
 import { Term } from '../components/Term';
 import { COACH_FIRST, COACH_LAST } from '../../engine/names';
 import { hash01 } from '../../engine/rng';
+import { arenaCapacity, fanEvent, PRICE_RU, priceForecast, profitOf, projectSeason, promoCost } from '../../engine/finance';
 
 export function FinanceScreen() {
   const L = useL();
@@ -35,7 +36,9 @@ export function FinanceScreen() {
   const khl = lgOf(L.teams[L.user]) === 'KHL';
   const farm = rosterLabels(L, L.user).farm;
   return (
-    <Screen title="Финансы" subtitle="Кэп-лист на 5 сезонов">
+    <Screen title="Финансы" subtitle="Бюджет клуба и кэп-лист">
+      <ClubBooks />
+      <SectionTitle>Кэп-лист</SectionTitle>
       <div className="grid grid-cols-3 gap-2">
         <Stat label="Потолок" value={money(capFor(L, L.user), 1)} />
         <Stat label="Занято" value={money(capHit(L, L.user), 1)} />
@@ -79,6 +82,55 @@ export function FinanceScreen() {
       </Card>
       <div className="text-[12px] text-muted mt-2 px-1"><span className="text-warn">Жёлтым</span> — последний год перед <Term k="ufa">UFA</Term>, <span className="text-ice">голубым</span> — перед <Term k="rfa">RFA</Term>.</div>
     </Screen>
+  );
+}
+
+function ClubBooks() {
+  const L = useL();
+  const { act, toast } = useGame.getState();
+  const F = L.fin;
+  const t = L.teams[L.user];
+  if (!F || !t) return null;
+  const proj = projectSeason(L);
+  const fc = priceForecast(L, F.price);
+  const c = F.cur;
+  const avg = c.homeGames ? Math.round(c.att / c.homeGames) : fc.att;
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2">
+        <Stat label="Прибыль (прогноз)" value={proj ? money(profitOf(proj), 1) : '—'} good={!!proj && profitOf(proj) >= 0} accent={!!proj && profitOf(proj) < 0} />
+        <Stat label="Зрители" value={avg.toLocaleString('ru-RU')} sub={`${Math.round((avg / arenaCapacity(t)) * 100)}% арены`} />
+        <Stat label="Аншлаги" value={`${c.sellouts}/${c.homeGames}`} sub={`болельщики ${Math.round(t.fans)}`} />
+      </div>
+      <Card className="mt-2">
+        <div className="text-[11px] uppercase tracking-wider text-muted">Цена билетов</div>
+        <Segmented className="mt-2" value={String(F.price)} onChange={(v) => act((L) => { L.fin!.price = Number(v); })} options={[-2, -1, 0, 1, 2].map((v) => ({ v: String(v), label: `${v > 0 ? '+' : v < 0 ? '−' : ''}${v ? Math.abs(v) * 15 + '%' : 'норма'}` }))} />
+        <div className="text-[13px] text-muted mt-2">
+          {PRICE_RU[F.price + 2]}: {money(fc.price, 0)} за билет · ожидается {fc.att.toLocaleString('ru-RU')} зрителей ({Math.round(fc.fill * 100)}%) · {money(fc.perGame, 1)} за матч · настроение болельщиков за сезон {fc.fansPerSeason >= 0 ? '+' : '−'}{Math.abs(Math.round(fc.fansPerSeason))}
+        </div>
+      </Card>
+      {proj && (
+        <Card className="mt-2 text-[13.5px]">
+          <div className="text-[11px] uppercase tracking-wider text-muted mb-1">Сезон {seasonLabel(L.season)} (прогноз)</div>
+          {([['Билеты', proj.gate], ['Арена: еда и сувениры', proj.extra], ['Телеправа', proj.media], ['Спонсоры', proj.sponsor], ['Плей-офф и призовые', c.playoff], ['Зарплаты игроков', -proj.payroll], ['Тренеры и службы', -proj.staff], ['Арена и перелёты', -proj.ops], ['Акции', -c.events]] as [string, number][]).filter(([, v]) => v).map(([k, v]) => (
+            <div key={k} className="flex justify-between py-0.5"><span className="text-muted">{k}</span><span className={cx('num', v < 0 ? 'text-bad' : 'text-good')}>{money(v, 1)}</span></div>
+          ))}
+          <Button size="sm" className="mt-2" onClick={() => { const r = act((L) => fanEvent(L)); toast(r.text, r.ok ? 'good' : 'bad'); }}>Акция для болельщиков · {money(promoCost(t))}</Button>
+        </Card>
+      )}
+      {F.hist.length > 0 && (
+        <Card pad={false} className="mt-2">
+          {F.hist.map((h, i) => (
+            <div key={i} className={cx('flex items-center justify-between px-4 h-11 text-[13.5px]', i && 'border-t hairline')}>
+              <span className="num">{seasonLabel(h.season)} · {L.teams[h.team]?.short}</span>
+              <span className="text-muted">{h.homeGames ? Math.round(h.att / h.homeGames).toLocaleString('ru-RU') : '—'} зр.</span>
+              <span className={cx('num', profitOf(h) >= 0 ? 'text-good' : 'text-bad')}>{money(profitOf(h), 1)}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+      <div className="text-[11.5px] text-faint mt-2 px-1">Модель-ориентир: реальные бухгалтерии клубов закрыты. Вместимость арен реальная. Финансы влияют на настроение болельщиков и доверие владельца, но не на шансы в матчах.</div>
+    </>
   );
 }
 

@@ -17,6 +17,9 @@ import { gameLg, isNhlGM, LEAGUE_STYLE, userTeam } from './leagues';
 import { khlAfterGames, khlGamesToday, khlPhaseTick, onKhlPlayoffGame } from './khl';
 import { intlDaily } from './intl';
 import { proDaily } from './pro';
+import { financeOnGame } from './finance';
+import { superCupToday } from './supercup';
+import { announceRecords } from './hall';
 
 export interface DayReport {
   date: string;
@@ -78,6 +81,7 @@ function applyGame(L: League, g: Game, box: MatchBox) {
   g.hs = r.hs; g.as = r.as; g.ot = r.ot; g.shH = r.shH; g.shA = r.shA; g.stars = r.stars;
   const H = L.teams[g.h], A = L.teams[g.a];
   H.lastGame = g.day; A.lastGame = g.day;
+  financeOnGame(L, g);
   const lg = gameLg(g);
   const key = statKey(L.season, playoff, lg);
 
@@ -220,6 +224,18 @@ export function advanceDay(L: League): DayReport {
     pushNews(L, { kind: 'league', title: 'Регулярный сезон начался!' });
   }
 
+  // Victoria Cup (early October, before the NHL opener).
+  const cup = superCupToday(L);
+  if (cup) {
+    report.games.push(cup.game);
+    const ut = userTeam(L);
+    if (cup.game.h === ut || cup.game.a === ut) {
+      report.userGame = cup;
+      lastUserBox = cup;
+      L.lastUserGame = cup.game.id;
+    }
+  }
+
   if (L.phase === 'regular' || L.phase === 'playoffs') {
     if (date === addDays(L.deadline, -1) && L.phase === 'regular' && isNhlGM(L)) {
       pushMsg(L, { from: 'Ассистент GM', kind: 'staff', title: 'Завтра дедлайн обменов', body: 'Это последний шанс усилить состав (или распродать активы) до конца сезона. После дедлайна обмены закрыты до окончания плей-офф.' });
@@ -227,7 +243,7 @@ export function advanceDay(L: League): DayReport {
       L.stops.push('deadline');
     }
     const byTeam = groupByTeam(L);
-    const todays = L.games.filter((g) => g.day === date && !g.played && !g.lg);
+    const todays = L.games.filter((g) => g.day === date && !g.played && !g.lg && !g.cup);
     // Rosters must be valid before games
     const playing = new Set<string>();
     for (const g of todays) { playing.add(g.h); playing.add(g.a); }
@@ -307,6 +323,7 @@ function endRegularSeason(L: League) {
   const st = sortedTeams(L);
   const pres = st[0];
   pushNews(L, { kind: 'award', title: `Президентский кубок — ${pres.name} (${pres.rec.pts} очков)`, team: pres.id, important: true });
+  announceRecords(L);
   L.stops.push('regular-end');
 }
 
